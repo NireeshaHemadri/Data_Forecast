@@ -8,7 +8,9 @@ import {
 } from 'lucide-react';
 
 // API Configuration
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 
+                 (import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL.replace(/\/$/, '')}/api` : "") || 
+                 "http://localhost:8000/api";
 const API_TOKEN = import.meta.env.VITE_API_TOKEN || "aegis_prod_api_key_2026";
 
 interface TestReport {
