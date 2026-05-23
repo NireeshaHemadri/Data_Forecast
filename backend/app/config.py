@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     # Allowed CORS Origins
     ALLOWED_ORIGINS: str = os.getenv(
         "ALLOWED_ORIGINS",
-        "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000"
+        "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000,https://data-forecast.vercel.app"
     )
     
     # Use SQLite as fallback if PostgreSQL is not available
