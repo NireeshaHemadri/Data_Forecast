@@ -26,12 +26,28 @@ class Settings(BaseSettings):
     
     @property
     def DATABASE_URL(self) -> str:
+        env_url = os.getenv("DATABASE_URL")
+        if env_url:
+            # SQLAlchemy asyncpg requires 'postgresql+asyncpg://' driver prefix
+            if env_url.startswith("postgres://"):
+                return env_url.replace("postgres://", "postgresql+asyncpg://", 1)
+            elif env_url.startswith("postgresql://"):
+                return env_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            return env_url
+            
         if self.USE_SQLITE:
             return "sqlite+aiosqlite:///./test_prediction.db"
         return f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
     @property
     def SYNC_DATABASE_URL(self) -> str:
+        env_url = os.getenv("DATABASE_URL")
+        if env_url:
+            # Sync session requires 'postgresql://' instead of legacy 'postgres://'
+            if env_url.startswith("postgres://"):
+                return env_url.replace("postgres://", "postgresql://", 1)
+            return env_url
+            
         if self.USE_SQLITE:
             return "sqlite:///./test_prediction.db"
         return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
