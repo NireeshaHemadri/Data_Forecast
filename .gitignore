@@ -1,0 +1,40 @@
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python Cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node/Frontend Builds
+node_modules/
+dist/
+build/
+.next/
+out/
+.vercel/
+
+# Database Files
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment Configurations & Keys
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+.env.staging
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+desktop.ini
