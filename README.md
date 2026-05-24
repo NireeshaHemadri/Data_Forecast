@@ -32,6 +32,20 @@ graph TD
 
 ---
 
+## 🌐 Deployment Architecture
+
+```mermaid
+graph TD
+    A["React Frontend (Vercel)"] -->|HTTPS requests / Bearer auth| B["FastAPI API (Render Docker)"]
+    B -->|Calculations| C["Prediction Engine (RandomForest)"]
+    B -->|Async Session| D["PostgreSQL Database (Render)"]
+    E["GitHub Commit / PR"] -->|Triggers| F["GitHub Actions (CI Workflow)"]
+    F -->|Deploy Webhook| B
+    F -->|Deploy Webhook| A
+```
+
+---
+
 ## 🚀 Quick Start Guide
 
 ### Option 1: Run with Docker Compose (Recommended)

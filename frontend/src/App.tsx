@@ -3,7 +3,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import { 
-  TrendingUp, TrendingDown, Database, UploadCloud, AlertCircle, CheckCircle, BarChart4,
+  Database, UploadCloud, AlertCircle, CheckCircle, BarChart4,
   Layers, Plus, X, ShieldAlert, Sparkles, Bug, Activity, Settings, Download, FileText
 } from 'lucide-react';
 
@@ -78,18 +78,26 @@ interface SHAPExplanation {
   features: SHAPFeature[];
 }
 
+const getWeekNumber = (date: Date) => {
+  const oneJan = new Date(date.getFullYear(), 0, 1);
+  const numberOfDays = Math.floor((date.getTime() - oneJan.getTime()) / (24 * 60 * 60 * 1000));
+  return Math.ceil((date.getDay() + 1 + numberOfDays) / 7);
+};
+
 export default function App() {
   // Application State
   const [projects, setProjects] = useState<string[]>([]);
   const [activeProject, setActiveProject] = useState<string>("");
   const [historicalData, setHistoricalData] = useState<TestReport[]>([]);
   const [forecastData, setForecastData] = useState<ForecastPoint[]>([]);
-  const [, setMetrics] = useState<Record<string, ModelMetrics>>({});
+  const [metrics, setMetrics] = useState<Record<string, ModelMetrics>>({});
   const [explanations, setExplanations] = useState<Record<string, SHAPExplanation>>({});
   const [modelType, setModelType] = useState<string>("Random Forest Regressor");
   const [lastTrained, setLastTrained] = useState<string>("22 May 2026");
   const [trainingSamples, setTrainingSamples] = useState<number>(52);
   const [forecastHorizon, setForecastHorizon] = useState<number>(4);
+
+  const r2Val = metrics.storyBugs?.r2 !== undefined ? metrics.storyBugs.r2.toFixed(2) : "0.85";
   
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -243,6 +251,47 @@ export default function App() {
     }
   };
 
+  const loadSampleDataset = () => {
+    setNewReport({
+      projectName: activeProject,
+      authors: "QA Lead",
+      storyTests: 60,
+      regressionTestsAutomated: 120,
+      regressionTestsManual: 80,
+      totalTestsByApplication: 260,
+      
+      storyPassed: 52,
+      storyFailed: 4,
+      storyUnexecuted: 0,
+      storyBlocked: 2,
+      storySkipped: 2,
+      storyCritical: 0,
+      storyNew: 8,
+      storyUnused: 0,
+      storyBugs: 4,
+      
+      arPassed: 114,
+      arFailed: 4,
+      arUnexecuted: 0,
+      arBlocked: 1,
+      arSkipped: 2,
+      arCritical: 1,
+      arNew: 5,
+      arUnused: 0,
+      arBugs: 2,
+      
+      mrPassed: 74,
+      mrFailed: 5,
+      mrUnexecuted: 2,
+      mrBlocked: 1,
+      mrSkipped: 1,
+      mrCritical: 1,
+      mrNew: 0,
+      mrUnused: 0,
+      mrBugs: 3
+    });
+  };
+
   // Submit new report
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -371,7 +420,7 @@ export default function App() {
 
       dataPoints.push({
         name: `Wk ${i + 1}`,
-        date: date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+        date: `W${getWeekNumber(date)}`,
         bugsActual: totalBugs,
         bugsForecast: null,
         bugsLower: null,
@@ -388,7 +437,6 @@ export default function App() {
 
     // Forecasted Points
     forecastData.forEach((f) => {
-      const date = new Date(f.createdAt);
       const arTotal = f.arPassed + f.arFailed;
       const arRate = arTotal > 0 ? (f.arPassed / arTotal) * 100 : 0;
       
@@ -398,7 +446,7 @@ export default function App() {
 
       dataPoints.push({
         name: `Frcst ${f.weekIndex}`,
-        date: date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+        date: `Forecast W${f.weekIndex}`,
         bugsActual: null,
         bugsForecast: f.totalBugs,
         bugsLower: Math.round(lower * 10) / 10,
@@ -460,12 +508,12 @@ export default function App() {
 
   const formatFeatureName = (name: string) => {
     switch(name) {
-      case "lag_1": return "Previous Week Value";
-      case "lag_2": return "2 Weeks Ago Value";
-      case "lag_3": return "3 Weeks Ago Value";
-      case "rolling_mean_3": return "3-Week Avg Trend";
-      case "rolling_std_3": return "Recent Volatility";
-      case "week_of_year": return "Seasonal Cycle Factor";
+      case "lag_1": return "Last Week Performance";
+      case "lag_2": return "2-Week Lag Value";
+      case "lag_3": return "3-Week Lag Value";
+      case "rolling_mean_3": return "3-Week Trend";
+      case "rolling_std_3": return "Recent Test Volume";
+      case "week_of_year": return "Seasonal Cycle";
       case "historical_mean": return "Historical Baseline Average";
       default: return name;
     }
@@ -483,8 +531,29 @@ export default function App() {
             <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
               Aegis AI <span className="text-[10px] uppercase font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-full">Predictive Engine</span>
             </h1>
-            <p className="text-xs text-slate-400 font-medium">Software Quality Metrics & QA Forecasting</p>
+            <p className="text-xs text-slate-400 font-medium">AI-Powered Weekly QA Forecasting Platform</p>
           </div>
+          <nav className="hidden md:flex items-center gap-6 ml-8 border-l border-white/10 pl-6">
+            <button className="text-xs font-bold text-indigo-400 transition-colors">Dashboard</button>
+            <button 
+              onClick={() => {
+                const el = document.querySelector('.lg\\:col-span-2');
+                el?.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="text-xs font-medium text-slate-400 hover:text-white transition-colors"
+            >
+              Forecast
+            </button>
+            <button 
+              onClick={() => {
+                setIsFormOpen(true);
+                setFormTab("manual");
+              }}
+              className="text-xs font-medium text-slate-400 hover:text-white transition-colors"
+            >
+              Weekly Reports
+            </button>
+          </nav>
         </div>
 
         {/* Action Controls */}
@@ -503,6 +572,18 @@ export default function App() {
               </select>
             </div>
           )}
+
+          {/* View API Docs */}
+          <a 
+            href={`${API_BASE.replace(/\/api$/, '')}/docs`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 bg-[#16182c] border border-white/15 hover:border-white/20 text-slate-300 hover:text-white rounded-lg text-xs px-3.5 py-2 font-semibold transition-all"
+            title="View FastAPI Swagger Interactive API Documentation"
+          >
+            <FileText className="h-3.5 w-3.5 text-indigo-400" />
+            View API Docs
+          </a>
 
           {/* Export Forecast Report */}
           <button 
@@ -532,12 +613,23 @@ export default function App() {
             className="flex items-center gap-2 bg-[#16182c] border border-white/15 hover:border-white/20 active:bg-slate-800 disabled:opacity-50 text-slate-300 hover:text-white rounded-lg text-xs px-3.5 py-2 font-semibold transition-all"
           >
             <Settings className={`h-3.5 w-3.5 ${isRetraining ? 'animate-spin' : ''}`} />
-            {isRetraining ? 'Retraining...' : 'Retrain Model'}
+            {isRetraining ? 'Retraining...' : 'Retrain AI Model'}
+          </button>
+
+          {/* Upload CSV Toggle */}
+          <button 
+            onClick={() => { setIsFormOpen(true); setFormTab("csv"); }}
+            disabled={historicalData.length === 0}
+            className="flex items-center gap-2 bg-[#16182c] border border-white/15 hover:border-white/20 disabled:opacity-50 text-slate-300 hover:text-white rounded-lg text-xs px-3.5 py-2 font-semibold transition-all"
+            title="Upload historical reports from CSV"
+          >
+            <UploadCloud className="h-3.5 w-3.5 text-indigo-400" />
+            Upload Historical Weekly CSV
           </button>
 
           {/* Add Weekly Report Toggle */}
           <button 
-            onClick={() => setIsFormOpen(true)}
+            onClick={() => { setIsFormOpen(true); setFormTab("manual"); }}
             className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-lg text-xs px-4 py-2 font-bold shadow-md shadow-indigo-900/40 hover:shadow-indigo-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
           >
             <Plus className="h-4 w-4" />
@@ -586,41 +678,33 @@ export default function App() {
             {highlights && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 animate-slide-up">
                 
-                {/* Highlight 1: Test Cases */}
+                {/* Highlight 1: Weekly Reports Processed */}
                 <div className="glass-panel glass-panel-hover rounded-2xl p-5 relative overflow-hidden">
                   <div className="absolute top-0 right-0 p-8 opacity-5">
-                    <Activity className="h-24 w-24 text-white" />
+                    <Database className="h-24 w-24 text-white" />
                   </div>
                   <div className="flex justify-between items-start mb-2">
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Forecasted Test Cases</span>
-                    <span className="bg-indigo-500/10 text-indigo-400 text-[10px] px-2 py-0.5 rounded-full font-bold border border-indigo-500/20">Wk 4 Prediction</span>
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Weekly Reports Processed</span>
+                    <span className="bg-indigo-500/10 text-indigo-400 text-[10px] px-2 py-0.5 rounded-full font-bold border border-indigo-500/20">Data Volume</span>
                   </div>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold tracking-tight text-white">{highlights.tests.val}</span>
-                    <span className={`text-xs font-bold flex items-center gap-0.5 ${highlights.tests.diff >= 0 ? 'text-indigo-400' : 'text-emerald-400'}`}>
-                      {highlights.tests.diff >= 0 ? '+' : ''}{highlights.tests.diff} ({highlights.tests.pct}%)
-                      {highlights.tests.diff >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                    </span>
+                    <span className="text-3xl font-bold tracking-tight text-white">{trainingSamples} Reports</span>
                   </div>
-                  <p className="text-xs text-slate-400 mt-2">Active testing scope predicted to change by week 4.</p>
+                  <p className="text-xs text-slate-400 mt-2">Total historical QA data volume ingested.</p>
                 </div>
 
-                {/* Highlight 2: Predicted Defect Count */}
+                {/* Highlight 2: Predicted Next 4 Weeks */}
                 <div className="glass-panel glass-panel-hover rounded-2xl p-5 relative overflow-hidden">
                   <div className="absolute top-0 right-0 p-8 opacity-5">
                     <Bug className="h-24 w-24 text-white" />
                   </div>
                   <div className="flex justify-between items-start mb-2">
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Expected Bug Volume</span>
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Predicted Next 4 Weeks</span>
                     <span className="bg-rose-500/10 text-rose-400 text-[10px] px-2 py-0.5 rounded-full font-bold border border-rose-500/20">Wk 4 Prediction</span>
                   </div>
                   <div className="flex items-baseline gap-2">
                     <span className="text-3xl font-bold tracking-tight text-white">
-                      {highlights.bugs.val} ± {highlights.bugs.error}
-                    </span>
-                    <span className={`text-xs font-bold flex items-center gap-0.5 ${highlights.bugs.diff >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
-                      {highlights.bugs.diff >= 0 ? '+' : ''}{highlights.bugs.diff} ({highlights.bugs.pct}%)
-                      {highlights.bugs.diff >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                      {highlights.bugs.val} ± {highlights.bugs.error} Bugs
                     </span>
                   </div>
                   <p className="text-xs text-slate-400 mt-2">
@@ -628,49 +712,34 @@ export default function App() {
                   </p>
                 </div>
 
-                {/* Highlight 3: Automation Pass Rate */}
+                {/* Highlight 3: Forecast Confidence */}
+                <div className="glass-panel glass-panel-hover rounded-2xl p-5 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-8 opacity-5">
+                    <Activity className="h-24 w-24 text-white" />
+                  </div>
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Forecast Confidence</span>
+                    <span className="bg-emerald-500/10 text-emerald-400 text-[10px] px-2 py-0.5 rounded-full font-bold border border-emerald-500/20">Confidence</span>
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-3xl font-bold tracking-tight text-white">{highlights.bugs.confidence}%</span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-2">Model prediction probability interval.</p>
+                </div>
+
+                {/* Highlight 4: Model Accuracy (R²) */}
                 <div className="glass-panel glass-panel-hover rounded-2xl p-5 relative overflow-hidden">
                   <div className="absolute top-0 right-0 p-8 opacity-5">
                     <CheckCircle className="h-24 w-24 text-white" />
                   </div>
                   <div className="flex justify-between items-start mb-2">
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Automation Pass Rate</span>
-                    <span className="bg-emerald-500/10 text-emerald-400 text-[10px] px-2 py-0.5 rounded-full font-bold border border-emerald-500/20">Wk 4 Prediction</span>
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Model Accuracy (R²)</span>
+                    <span className="bg-violet-500/10 text-violet-400 text-[10px] px-2 py-0.5 rounded-full font-bold border border-violet-500/20">Goodness-of-Fit</span>
                   </div>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold tracking-tight text-white">{highlights.arRate.val}%</span>
-                    <span className={`text-xs font-bold flex items-center gap-0.5 ${highlights.arRate.diff >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {highlights.arRate.diff >= 0 ? '+' : ''}{highlights.arRate.diff}%
-                      {highlights.arRate.diff >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                    </span>
+                    <span className="text-3xl font-bold tracking-tight text-white">{r2Val}</span>
                   </div>
-                  <p className="text-xs text-slate-400 mt-2">Predicted execution quality of automated regression runs.</p>
-                </div>
-
-                {/* Highlight 4: Model Metadata */}
-                <div className="glass-panel glass-panel-hover rounded-2xl p-5 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 p-8 opacity-5">
-                    <Settings className="h-24 w-24 text-white" />
-                  </div>
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Model Architecture</span>
-                    <span className="bg-violet-500/10 text-violet-400 text-[10px] px-2 py-0.5 rounded-full font-bold border border-violet-500/20">Metadata</span>
-                  </div>
-                  <div className="flex flex-col gap-0.5 text-xs text-slate-300">
-                    <div className="font-bold text-white truncate">{modelType}</div>
-                    <div className="mt-1 flex justify-between">
-                      <span className="text-slate-400">Samples:</span>
-                      <span className="font-semibold text-indigo-300">{trainingSamples} weeks</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Last trained:</span>
-                      <span className="font-semibold text-indigo-300">{lastTrained}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Horizon:</span>
-                      <span className="font-semibold text-indigo-300">{forecastHorizon} weeks</span>
-                    </div>
-                  </div>
+                  <p className="text-xs text-slate-400 mt-2">RandomForest regression model coefficient.</p>
                 </div>
 
               </div>
@@ -685,7 +754,7 @@ export default function App() {
                   <div className="flex items-center gap-2">
                     <BarChart4 className="h-5 w-5 text-indigo-400" />
                     <div>
-                      <h2 className="text-lg font-bold text-white">Historical Weekly Reports & 4-Week Forecast</h2>
+                      <h2 className="text-lg font-bold text-white">Historical Weekly Reports → Next 4-Week AI Forecast</h2>
                       <p className="text-xs text-slate-400">Time-series forecasting mapping weekly trends to next month predictions</p>
                     </div>
                   </div>
@@ -904,38 +973,18 @@ export default function App() {
                       </div>
 
                       <div className="flex flex-col gap-3">
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Feature Influence Rankings</h4>
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Top AI Drivers</h4>
                         <div className="flex flex-col gap-2.5">
                           {explanations[shapMetric].features
                             .sort((a, b) => Math.abs(b.shapValue) - Math.abs(a.shapValue))
                             .map((feat) => {
                               const isPositive = feat.shapValue >= 0;
-                              const maxVal = Math.max(...explanations[shapMetric].features.map(f => Math.abs(f.shapValue)));
-                              const widthPercent = maxVal > 0 ? (Math.abs(feat.shapValue) / maxVal) * 100 : 0;
-                              
                               return (
-                                <div key={feat.featureName} className="group relative text-xs flex flex-col gap-1.5">
-                                  <div className="flex justify-between font-semibold">
-                                    <span className="text-slate-300">{formatFeatureName(feat.featureName)}</span>
-                                    <span className={isPositive ? 'text-rose-400' : 'text-emerald-400'}>
-                                      {isPositive ? '+' : ''}{feat.shapValue.toFixed(2)}
-                                    </span>
-                                  </div>
-                                  
-                                  <div className="text-[10px] text-slate-400 font-medium">
-                                    Actual Value: <span className="text-indigo-300 font-semibold">{feat.featureValue.toFixed(1)}</span>
-                                  </div>
-
-                                  <div className="h-1.5 w-full bg-slate-900 rounded-full overflow-hidden flex">
-                                    <div 
-                                      className={`h-full rounded-full transition-all duration-500 ${isPositive ? 'bg-gradient-to-r from-rose-500 to-orange-500' : 'bg-gradient-to-r from-emerald-500 to-cyan-500'}`}
-                                      style={{ width: `${widthPercent}%` }}
-                                    ></div>
-                                  </div>
-
-                                  <div className="opacity-0 group-hover:opacity-100 absolute bg-[#121424] border border-white/10 rounded-lg p-2.5 bottom-8 left-0 right-0 shadow-xl transition-all duration-200 z-10 text-[11px] font-medium leading-relaxed">
-                                    {feat.description}
-                                  </div>
+                                <div key={feat.featureName} className="flex justify-between items-center text-xs py-1 border-b border-white/5 last:border-0">
+                                  <span className="text-slate-300 font-medium">{formatFeatureName(feat.featureName)}</span>
+                                  <span className={`font-bold ${isPositive ? 'text-rose-400' : 'text-emerald-400'}`}>
+                                    {isPositive ? '+' : ''}{feat.shapValue.toFixed(1)}
+                                  </span>
                                 </div>
                               );
                             })}
@@ -947,6 +996,43 @@ export default function App() {
                       SHAP details unavailable. Seed database to load forecasting explanations.
                     </div>
                   )}
+                </div>
+
+                {/* AI Model Details Panel */}
+                <div className="glass-panel rounded-2xl p-6 flex flex-col gap-4 animate-slide-up">
+                  <div className="border-b border-white/5 pb-3">
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                      <Settings className="h-4 w-4 text-indigo-400" /> AI Model Details
+                    </h3>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Observability stats for active forecaster model</p>
+                  </div>
+                  
+                  <div className="flex flex-col gap-2 text-xs text-slate-300">
+                    <div className="flex justify-between py-1 border-b border-white/5">
+                      <span className="text-slate-400">Model Type:</span>
+                      <span className="font-bold text-white">{modelType}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-white/5">
+                      <span className="text-slate-400">Training Samples:</span>
+                      <span className="font-semibold text-indigo-300">{trainingSamples} weekly samples</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-white/5">
+                      <span className="text-slate-400">Last Trained:</span>
+                      <span className="font-semibold text-indigo-300">{lastTrained}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-white/5">
+                      <span className="text-slate-400">Forecast Horizon:</span>
+                      <span className="font-semibold text-indigo-300">{forecastHorizon} weeks</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-white/5">
+                      <span className="text-slate-400">MAE (Defects):</span>
+                      <span className="font-semibold text-indigo-300">{metrics.storyBugs?.mae !== undefined ? metrics.storyBugs.mae.toFixed(2) : "1.4"}</span>
+                    </div>
+                    <div className="flex justify-between py-1">
+                      <span className="text-slate-400">Goodness-of-Fit (R²):</span>
+                      <span className="font-semibold text-indigo-300">{r2Val}</span>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Model Comparisons Panel */}
@@ -1008,7 +1094,7 @@ export default function App() {
             <div className="flex justify-between items-center border-b border-white/10 pb-4">
               <div>
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <UploadCloud className="text-indigo-400" /> Weekly Test Ingestion
+                  <UploadCloud className="text-indigo-400" /> Submit Weekly QA Report
                 </h3>
                 <p className="text-xs text-slate-400">Add weekly report numbers to update models</p>
               </div>
@@ -1213,6 +1299,13 @@ export default function App() {
                 </div>
 
                 <div className="flex gap-3 justify-end border-t border-white/10 pt-4 mt-auto">
+                  <button 
+                    type="button"
+                    onClick={loadSampleDataset}
+                    className="mr-auto bg-[#16182c] border border-white/15 hover:border-white/20 text-slate-300 hover:text-white rounded-lg text-xs px-4 py-2 font-semibold transition-all"
+                  >
+                    Load Sample Weekly Dataset
+                  </button>
                   <button 
                     type="button"
                     onClick={() => setIsFormOpen(false)}

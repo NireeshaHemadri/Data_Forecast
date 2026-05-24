@@ -115,14 +115,14 @@ describe('Dashboard Component Tests', () => {
     
     // Wait for the components to populate and loading state to end
     await waitFor(() => {
-      expect(screen.getByText('Expected Bug Volume')).toBeDefined();
+      expect(screen.getByText('Predicted Next 4 Weeks')).toBeDefined();
     }, { timeout: 5000 });
 
     // Verify project selector options populated
     expect(screen.getByText('Project Pegasus')).toBeDefined();
     
-    // Chart title renamed to "Historical Weekly Reports & 4-Week Forecast"
-    expect(screen.getByText('Historical Weekly Reports & 4-Week Forecast')).toBeDefined();
+    // Chart title renamed to "Historical Weekly Reports → Next 4-Week AI Forecast"
+    expect(screen.getByText('Historical Weekly Reports → Next 4-Week AI Forecast')).toBeDefined();
 
     // Check confidence display: 12 ± 2 bugs (the totalBugs is 12, error margin is 2.0)
     expect(screen.getByText(/12 ± 2/i)).toBeDefined();
@@ -137,7 +137,7 @@ describe('Dashboard Component Tests', () => {
 
     // Check Model Metadata section (Random Forest Regressor, 52 weeks, Last trained, Horizon)
     expect(screen.getByText(/Random Forest Regressor/i)).toBeDefined();
-    expect(screen.getByText(/52 weeks/i)).toBeDefined();
+    expect(screen.getByText(/52 weekly samples/i)).toBeDefined();
     expect(screen.getByText(/22 May 2026 17:30/i)).toBeDefined();
     expect(screen.getAllByText(/4 weeks/i).length).toBeGreaterThanOrEqual(1);
 
