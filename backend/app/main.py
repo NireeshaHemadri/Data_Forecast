@@ -15,10 +15,25 @@ async def lifespan(app: FastAPI):
     await init_db()
     
     # Auto-seed database if empty
-    print("Auto-seeding default project data...")
+    print("Checking database populate status...")
     async for db in get_db():
         try:
-            await seed_all(db)
+            from sqlalchemy.future import select
+            from sqlalchemy import func
+            from app.db.models import TestReport
+            
+            result = await db.execute(select(func.count(TestReport.id)))
+            count = result.scalar() or 0
+            if count == 0:
+                print("Database is empty. Auto-seeding default project data...")
+                await seed_all(db)
+                # Pre-compile forecast cache asynchronously
+                import asyncio
+                from app.api.router import update_project_forecast_cache
+                asyncio.create_task(update_project_forecast_cache("Project Pegasus"))
+                asyncio.create_task(update_project_forecast_cache("Project Orion"))
+            else:
+                print(f"Database contains {count} records. Skipping auto-seed.")
         except Exception as e:
             print(f"Failed to auto-seed database: {e}")
         break  # Only run once on startup

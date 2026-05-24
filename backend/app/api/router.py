@@ -1,15 +1,19 @@
 import io
+import os
+import json
 import pandas as pd
+from datetime import datetime
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, BackgroundTasks
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.concurrency import run_in_threadpool
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func
 
 from app.config import settings
-from app.db.session import get_db
+from app.db.session import get_db, async_session
 from app.db.models import TestReport
 from app.db.schemas import (
     TestReportCreate, TestReportInDB, ProjectForecastResponse,
@@ -20,6 +24,61 @@ from app.ml.forecaster import make_predictions
 
 router = APIRouter()
 security = HTTPBearer()
+
+CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cache")
+os.makedirs(CACHE_DIR, exist_ok=True)
+
+def get_cache_path(project_name: str) -> str:
+    safe_name = "".join([c if c.isalnum() else "_" for c in project_name])
+    return os.path.join(CACHE_DIR, f"forecast_{safe_name}.json")
+
+def read_forecast_cache(project_name: str) -> Optional[Dict[str, Any]]:
+    path = get_cache_path(project_name)
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if data.get("version") == 1:
+                    return data.get("payload")
+        except Exception as e:
+            print(f"Error reading cache for {project_name}: {e}")
+    return None
+
+def write_forecast_cache(project_name: str, payload: Dict[str, Any]) -> None:
+    path = get_cache_path(project_name)
+    try:
+        wrapper = {
+            "version": 1,
+            "generated_at": datetime.now().isoformat(),
+            "project": project_name,
+            "payload": jsonable_encoder(payload)
+        }
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(wrapper, f)
+    except Exception as e:
+        print(f"Error writing cache for {project_name}: {e}")
+
+async def update_project_forecast_cache(project_name: str) -> Optional[Dict[str, Any]]:
+    async with async_session() as db:
+        result = await db.execute(
+            select(TestReport)
+            .filter(TestReport.projectName == project_name)
+            .order_by(TestReport.createdAt.asc())
+        )
+        reports = result.scalars().all()
+        
+        if not reports:
+            path = get_cache_path(project_name)
+            if os.path.exists(path):
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
+            return None
+            
+        forecast_payload = await run_in_threadpool(make_predictions, reports)
+        write_forecast_cache(project_name, forecast_payload)
+        return forecast_payload
 
 async def get_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
     """Validate Bearer API key for secured endpoints."""
@@ -70,10 +129,11 @@ async def get_project_reports(
 @router.post("/reports", response_model=TestReportInDB, status_code=status.HTTP_201_CREATED)
 async def create_test_report(
     report_in: TestReportCreate, 
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     api_key: str = Depends(get_api_key)
 ):
-    """Submit a new weekly test report and trigger model updates."""
+    """Submit a new weekly test report and trigger model updates asynchronously."""
     try:
         # Calculate total tests dynamically to verify consistency
         computed_total = report_in.storyTests + report_in.regressionTestsAutomated + report_in.regressionTestsManual
@@ -124,6 +184,10 @@ async def create_test_report(
         db.add(db_report)
         await db.commit()
         await db.refresh(db_report)
+        
+        # Trigger background forecast cache update
+        background_tasks.add_task(update_project_forecast_cache, db_report.projectName)
+        
         return db_report
     except Exception as e:
         await db.rollback()
@@ -140,10 +204,15 @@ async def get_project_forecast(
 ):
     """
     Fetch 4-week forecast metrics for a specific project.
-    Uses run_in_threadpool to run ML model training non-blockingly.
+    Reads from cache if available. If cache miss, generates forecast synchronously and caches it.
     """
     try:
-        # Retrieve all historical records sorted by createdAt
+        # Check cache first
+        cached = read_forecast_cache(project_name)
+        if cached:
+            return cached
+            
+        # Cache miss - retrieve all historical records sorted by createdAt
         result = await db.execute(
             select(TestReport)
             .filter(TestReport.projectName == project_name)
@@ -159,6 +228,8 @@ async def get_project_forecast(
             
         # Run ML engine training/forecasting inside threadpool to prevent event loop blocking
         forecast_payload = await run_in_threadpool(make_predictions, reports)
+        # Write to cache
+        write_forecast_cache(project_name, forecast_payload)
         return forecast_payload
     except HTTPException as he:
         raise he
@@ -176,7 +247,7 @@ async def retrain_project_model(
     db: AsyncSession = Depends(get_db),
     api_key: str = Depends(get_api_key)
 ):
-    """Manually trigger model retraining and output performance stats."""
+    """Manually trigger model retraining and output performance stats synchronously."""
     try:
         result = await db.execute(
             select(TestReport)
@@ -192,6 +263,8 @@ async def retrain_project_model(
             )
             
         forecast_payload = await run_in_threadpool(make_predictions, reports)
+        # Update cache synchronously
+        write_forecast_cache(project_name, forecast_payload)
         
         return {
             "status": "success",
@@ -212,6 +285,7 @@ async def retrain_project_model(
 @router.post("/projects/{project_name}/upload-csv", response_model=CSVUploadResponse)
 async def upload_csv_file(
     project_name: str, 
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...), 
     db: AsyncSession = Depends(get_db),
     api_key: str = Depends(get_api_key)
@@ -287,6 +361,10 @@ async def upload_csv_file(
             imported_count += 1
             
         await db.commit()
+        
+        # Trigger background forecast cache update
+        background_tasks.add_task(update_project_forecast_cache, project_name)
+        
         return {
             "status": "success",
             "message": f"Successfully imported {imported_count} weekly reports.",
@@ -304,6 +382,7 @@ async def upload_csv_file(
 
 @router.post("/upload-csv", response_model=CSVUploadResponse)
 async def upload_csv_global(
+    background_tasks: BackgroundTasks,
     project_name: Optional[str] = None,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
@@ -311,28 +390,33 @@ async def upload_csv_global(
 ):
     """Global endpoint to upload a CSV dataset."""
     actual_project = project_name or "Project Pegasus"
-    return await upload_csv_file(project_name=actual_project, file=file, db=db, api_key=api_key)
+    return await upload_csv_file(project_name=actual_project, background_tasks=background_tasks, file=file, db=db, api_key=api_key)
 
 @router.post("/admin/seed-sample-data", status_code=status.HTTP_200_OK)
 async def trigger_seeding(
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     api_key: str = Depends(get_api_key)
 ):
-    """Manually trigger data seeding for Project Pegasus and Project Orion."""
+    """Manually trigger data seeding (resetting) for Project Pegasus and Project Orion."""
     try:
         from app.db.models import TestReport
-        from sqlalchemy.future import select
-        # Check if project data exists before seeding
-        result = await db.execute(select(TestReport).filter(TestReport.projectName == "Project Pegasus"))
-        existing = result.scalars().first()
+        from sqlalchemy import delete
         
+        # Reset: delete existing demo records
+        await db.execute(delete(TestReport).filter(TestReport.projectName.in_(["Project Pegasus", "Project Orion"])))
+        await db.commit()
+        
+        # Seed fresh
         await seed_all(db)
         
-        if existing:
-            return {"status": "success", "message": "Demo dataset already loaded"}
-        else:
-            return {"status": "success", "message": "Fresh demo dataset loaded"}
+        # Trigger background forecast cache updates
+        background_tasks.add_task(update_project_forecast_cache, "Project Pegasus")
+        background_tasks.add_task(update_project_forecast_cache, "Project Orion")
+        
+        return {"status": "success", "message": "Demo dataset reset successfully"}
     except Exception as e:
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error seeding database: {str(e)}"
@@ -340,10 +424,23 @@ async def trigger_seeding(
 
 # Deprecated/compatibility endpoints to prevent sudden breakages
 @router.post("/seed", status_code=status.HTTP_200_OK, include_in_schema=False)
-async def deprecated_seed(db: AsyncSession = Depends(get_db)):
+async def deprecated_seed(
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db)
+):
     try:
+        from app.db.models import TestReport
+        from sqlalchemy import delete
+        
+        await db.execute(delete(TestReport).filter(TestReport.projectName.in_(["Project Pegasus", "Project Orion"])))
+        await db.commit()
+        
         await seed_all(db)
-        return {"status": "success", "message": "Database seed completed successfully (deprecated endpoint)."}
+        
+        background_tasks.add_task(update_project_forecast_cache, "Project Pegasus")
+        background_tasks.add_task(update_project_forecast_cache, "Project Orion")
+        
+        return {"status": "success", "message": "Demo dataset reset successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -354,8 +451,16 @@ async def deprecated_get_reports(project_name: str, db: AsyncSession = Depends(g
 
 @router.get("/forecast/{project_name}", response_model=ProjectForecastResponse, include_in_schema=False)
 async def deprecated_forecast(project_name: str, db: AsyncSession = Depends(get_db)):
+    # Check cache first
+    cached = read_forecast_cache(project_name)
+    if cached:
+        return cached
+        
     result = await db.execute(select(TestReport).filter(TestReport.projectName == project_name).order_by(TestReport.createdAt.asc()))
     reports = result.scalars().all()
     if not reports:
         raise HTTPException(status_code=404, detail="Not Found")
-    return await run_in_threadpool(make_predictions, reports)
+        
+    forecast_payload = await run_in_threadpool(make_predictions, reports)
+    write_forecast_cache(project_name, forecast_payload)
+    return forecast_payload

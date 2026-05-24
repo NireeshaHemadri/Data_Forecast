@@ -177,7 +177,7 @@ export default function App() {
       if (data.length > 0) {
         setActiveProject(data[0]);
       } else {
-        setError("No project data found. Please click 'Load Demo Dataset' to initialize.");
+        setError("No project data found. Please click 'Reset Demo Dataset' to initialize.");
         setLoading(false);
       }
     } catch (err: any) {
@@ -217,7 +217,7 @@ export default function App() {
     }
   };
 
-  // Seed default data
+  // Reset/seed default data
   const handleSeedData = async () => {
     try {
       setIsSeeding(true);
@@ -227,7 +227,7 @@ export default function App() {
         method: "POST",
         headers: { "Authorization": `Bearer ${API_TOKEN}` }
       });
-      if (!res.ok) throw new Error("Seeding failed.");
+      if (!res.ok) throw new Error("Resetting demo dataset failed.");
       const responseData = await res.json();
       
       const projectsRes = await fetch(`${API_BASE}/projects`, {
@@ -245,14 +245,14 @@ export default function App() {
       
       setToastMessage({
         type: 'success',
-        text: responseData.message || "Demo dataset loaded successfully."
+        text: responseData.message || "Demo dataset reset successfully."
       });
       setTimeout(() => setToastMessage(null), 4000);
     } catch (err: any) {
-      setError(`Seeding error: ${err.message}`);
+      setError(`Resetting demo dataset error: ${err.message}`);
       setToastMessage({
         type: 'error',
-        text: `Seeding error: ${err.message}`
+        text: `Resetting error: ${err.message}`
       });
       setTimeout(() => setToastMessage(null), 4000);
       setLoading(false);
@@ -649,13 +649,13 @@ export default function App() {
           </button>
 
           {/* Seed Utility */}
-          <button 
+          <button
             onClick={handleSeedData}
             disabled={isSeeding}
-            className="flex items-center gap-2 bg-[#16182c] border border-white/15 hover:border-white/20 active:bg-slate-800 disabled:opacity-50 text-slate-300 hover:text-white rounded-lg text-xs px-3.5 py-2 font-semibold transition-all"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800 text-[11px] font-bold text-white hover:bg-slate-700 hover:border-slate-600 transition-all cursor-pointer select-none disabled:opacity-50 disabled:cursor-not-allowed uppercase shadow-lg shadow-black/10 shrink-0"
           >
             <Database className={`h-3.5 w-3.5 ${isSeeding ? 'animate-spin' : ''}`} />
-            {isSeeding ? 'Loading...' : 'Load Demo Dataset'}
+            {isSeeding ? 'Resetting...' : 'Reset Demo Dataset'}
           </button>
 
           {/* Retrain Trigger */}
@@ -695,12 +695,12 @@ export default function App() {
             <div>
               <h3 className="text-sm font-semibold">System Connection Warning</h3>
               <p className="text-xs text-rose-300/80 mt-1">{error}</p>
-              {error.includes("Seed") && (
+              {error.includes("Reset Demo Dataset") && (
                 <button 
                   onClick={handleSeedData}
                   className="mt-2 text-xs font-bold text-rose-400 hover:text-rose-300 flex items-center gap-1 underline"
                 >
-                  Click here to load demo dataset templates &rarr;
+                  Click here to reset demo dataset templates &rarr;
                 </button>
               )}
             </div>
@@ -1080,7 +1080,7 @@ export default function App() {
                     </div>
                   ) : (
                     <div className="h-48 border border-dashed border-white/10 rounded-xl flex items-center justify-center text-xs text-slate-400 italic">
-                      SHAP details unavailable. Load demo dataset to view forecasting explanations.
+                      SHAP details unavailable. Reset demo dataset to view forecasting explanations.
                     </div>
                   )}
                 </div>
