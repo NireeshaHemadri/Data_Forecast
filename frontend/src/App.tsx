@@ -174,7 +174,7 @@ export default function App() {
       if (data.length > 0) {
         setActiveProject(data[0]);
       } else {
-        setError("No project data found. Please click 'Seed Sample Data' to initialize.");
+        setError("No project data found. Please click 'Load Demo Dataset' to initialize.");
         setLoading(false);
       }
     } catch (err: any) {
@@ -427,6 +427,8 @@ export default function App() {
         bugsUpper: null,
         testsActual: h.totalTestsByApplication,
         testsForecast: null,
+        testsLower: null,
+        testsUpper: null,
         arRateActual: Math.round(arRate * 10) / 10,
         arRateForecast: null,
       });
@@ -444,6 +446,11 @@ export default function App() {
       const lower = Math.max(0, f.totalBugs - margin);
       const upper = f.totalBugs + margin;
 
+      const testsMae = metrics.totalTestsByApplication?.mae || 15.0;
+      const testsMargin = testsMae * (1.0 + 0.15 * f.weekIndex);
+      const testsLower = Math.max(0, f.totalTestsByApplication - testsMargin);
+      const testsUpper = f.totalTestsByApplication + testsMargin;
+
       dataPoints.push({
         name: `Frcst ${f.weekIndex}`,
         date: `Forecast W${f.weekIndex}`,
@@ -453,6 +460,8 @@ export default function App() {
         bugsUpper: Math.round(upper * 10) / 10,
         testsActual: null,
         testsForecast: f.totalTestsByApplication,
+        testsLower: Math.round(testsLower * 10) / 10,
+        testsUpper: Math.round(testsUpper * 10) / 10,
         arRateActual: null,
         arRateForecast: Math.round(arRate * 10) / 10,
       });
@@ -464,6 +473,8 @@ export default function App() {
       lastPoint.bugsLower = lastPoint.bugsActual;
       lastPoint.bugsUpper = lastPoint.bugsActual;
       lastPoint.testsForecast = lastPoint.testsActual;
+      lastPoint.testsLower = lastPoint.testsActual;
+      lastPoint.testsUpper = lastPoint.testsActual;
       lastPoint.arRateForecast = lastPoint.arRateActual;
     }
 
@@ -484,6 +495,8 @@ export default function App() {
     const histARRate = (lastHistory.arPassed / (lastHistory.regressionTestsAutomated || 1)) * 100;
     const foreARRate = (lastForecast.arPassed / (lastForecast.regressionTestsAutomated || 1)) * 100;
 
+    const r2Tests = metrics.totalTestsByApplication?.r2 !== undefined ? metrics.totalTestsByApplication.r2 : 0.82;
+
     return {
       bugs: {
         val: Math.round(foreBugs),
@@ -495,7 +508,9 @@ export default function App() {
       tests: {
         val: Math.round(lastForecast.totalTestsByApplication),
         diff: Math.round(lastForecast.totalTestsByApplication - lastHistory.totalTestsByApplication),
-        pct: lastHistory.totalTestsByApplication > 0 ? Math.round(((lastForecast.totalTestsByApplication - lastHistory.totalTestsByApplication) / lastHistory.totalTestsByApplication) * 100) : 0
+        pct: lastHistory.totalTestsByApplication > 0 ? Math.round(((lastForecast.totalTestsByApplication - lastHistory.totalTestsByApplication) / lastHistory.totalTestsByApplication) * 100) : 0,
+        error: Math.round((metrics.totalTestsByApplication?.mae || 15.0) * (1.0 + 0.15 * 4) * 10) / 10,
+        confidence: Math.round(r2Tests * 100)
       },
       arRate: {
         val: Math.round(foreARRate * 10) / 10,
@@ -573,7 +588,7 @@ export default function App() {
             </div>
           )}
 
-          {/* View API Docs */}
+          {/* API Docs */}
           <a 
             href={`${API_BASE.replace(/\/api$/, '')}/docs`}
             target="_blank"
@@ -582,7 +597,7 @@ export default function App() {
             title="View FastAPI Swagger Interactive API Documentation"
           >
             <FileText className="h-3.5 w-3.5 text-indigo-400" />
-            View API Docs
+            API Docs
           </a>
 
           {/* Export Forecast Report */}
@@ -603,7 +618,7 @@ export default function App() {
             className="flex items-center gap-2 bg-[#16182c] border border-white/15 hover:border-white/20 active:bg-slate-800 disabled:opacity-50 text-slate-300 hover:text-white rounded-lg text-xs px-3.5 py-2 font-semibold transition-all"
           >
             <Database className={`h-3.5 w-3.5 ${isSeeding ? 'animate-spin' : ''}`} />
-            {isSeeding ? 'Seeding...' : 'Seed Sample Data'}
+            {isSeeding ? 'Loading...' : 'Load Demo Dataset'}
           </button>
 
           {/* Retrain Trigger */}
@@ -624,7 +639,7 @@ export default function App() {
             title="Upload historical reports from CSV"
           >
             <UploadCloud className="h-3.5 w-3.5 text-indigo-400" />
-            Upload Historical Weekly CSV
+            Upload Weekly CSV
           </button>
 
           {/* Add Weekly Report Toggle */}
@@ -659,7 +674,7 @@ export default function App() {
                   onClick={handleSeedData}
                   className="mt-2 text-xs font-bold text-rose-400 hover:text-rose-300 flex items-center gap-1 underline"
                 >
-                  Click here to auto-seed standard project templates &rarr;
+                  Click here to load demo dataset templates &rarr;
                 </button>
               )}
             </div>
@@ -702,10 +717,18 @@ export default function App() {
                     <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Predicted Next 4 Weeks</span>
                     <span className="bg-rose-500/10 text-rose-400 text-[10px] px-2 py-0.5 rounded-full font-bold border border-rose-500/20">Wk 4 Prediction</span>
                   </div>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold tracking-tight text-white">
-                      {highlights.bugs.val} ± {highlights.bugs.error} Bugs
-                    </span>
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl font-bold tracking-tight text-white">
+                        {highlights.bugs.val} ± {highlights.bugs.error} Bugs
+                      </span>
+                    </div>
+                    <div className="flex items-baseline gap-2 border-t border-white/5 pt-1.5">
+                      <span className="text-xs font-semibold text-slate-400">Tests:</span>
+                      <span className="text-lg font-bold text-slate-200">
+                        {highlights.tests.val} ± {highlights.tests.error}
+                      </span>
+                    </div>
                   </div>
                   <p className="text-xs text-slate-400 mt-2">
                     Weekly defect influx. Confidence: <span className="font-semibold text-indigo-300">{highlights.bugs.confidence}%</span>
@@ -721,10 +744,19 @@ export default function App() {
                     <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Forecast Confidence</span>
                     <span className="bg-emerald-500/10 text-emerald-400 text-[10px] px-2 py-0.5 rounded-full font-bold border border-emerald-500/20">Confidence</span>
                   </div>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold tracking-tight text-white">{highlights.bugs.confidence}%</span>
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl font-bold tracking-tight text-white">{highlights.bugs.confidence}%</span>
+                      <span className="text-xs font-semibold text-slate-400 uppercase ml-1.5">Bugs</span>
+                    </div>
+                    <div className="flex items-baseline gap-2 border-t border-white/5 pt-1.5">
+                      <span className="text-xs font-semibold text-slate-400">Tests:</span>
+                      <span className="text-lg font-bold text-slate-200 ml-1.5">
+                        {highlights.tests.confidence}%
+                      </span>
+                    </div>
                   </div>
-                  <p className="text-xs text-slate-400 mt-2">Model prediction probability interval.</p>
+                  <p className="text-xs text-slate-400 mt-2">Model prediction probability intervals.</p>
                 </div>
 
                 {/* Highlight 4: Model Accuracy (R²) */}
@@ -868,22 +900,40 @@ export default function App() {
                         <>
                           <Area 
                             type="monotone" 
-                            name="Actual Total Tests"
+                            name="Actual Weekly Test Volume"
                             dataKey="testsActual" 
                             stroke="#6366f1" 
                             strokeWidth={2.5}
-                            fillOpacity={1} 
+                            fillOpacity={0.2} 
                             fill="url(#colorActual)" 
                           />
                           <Area 
                             type="monotone" 
-                            name="AI Forecasted Total Tests"
+                            name="Predicted Weekly Test Volume"
                             dataKey="testsForecast" 
                             stroke="#d946ef" 
                             strokeWidth={2.5}
                             strokeDasharray="4 4"
-                            fillOpacity={1} 
+                            fillOpacity={0.2} 
                             fill="url(#colorForecast)" 
+                          />
+                          {/* Uncertainty Bounds Display for Tests */}
+                          <Area 
+                            type="monotone" 
+                            name="Uncertainty Range Upper"
+                            dataKey="testsUpper" 
+                            stroke="rgba(217, 70, 239, 0.2)" 
+                            strokeWidth={1}
+                            fillOpacity={1} 
+                            fill="url(#colorCI)" 
+                          />
+                          <Area 
+                            type="monotone" 
+                            name="Uncertainty Range Lower"
+                            dataKey="testsLower" 
+                            stroke="rgba(217, 70, 239, 0.2)" 
+                            strokeWidth={1}
+                            fill="none" 
                           />
                         </>
                       )}
@@ -923,7 +973,7 @@ export default function App() {
                     <span className="flex items-center gap-1.5">
                       <span className="h-2 w-4 border border-dashed border-pink-500 rounded-sm"></span> Forecast (Next 4 Weeks)
                     </span>
-                    {chartMetric === "bugs" && (
+                    {(chartMetric === "bugs" || chartMetric === "tests") && (
                       <span className="flex items-center gap-1.5">
                         <span className="h-2.5 w-4 bg-pink-500/10 border border-pink-500/20 rounded-sm"></span> Uncertainty Margin (95% CI)
                       </span>
@@ -977,6 +1027,7 @@ export default function App() {
                         <div className="flex flex-col gap-2.5">
                           {explanations[shapMetric].features
                             .sort((a, b) => Math.abs(b.shapValue) - Math.abs(a.shapValue))
+                            .slice(0, 5)
                             .map((feat) => {
                               const isPositive = feat.shapValue >= 0;
                               return (
@@ -993,7 +1044,7 @@ export default function App() {
                     </div>
                   ) : (
                     <div className="h-48 border border-dashed border-white/10 rounded-xl flex items-center justify-center text-xs text-slate-400 italic">
-                      SHAP details unavailable. Seed database to load forecasting explanations.
+                      SHAP details unavailable. Load demo dataset to view forecasting explanations.
                     </div>
                   )}
                 </div>
@@ -1027,6 +1078,10 @@ export default function App() {
                     <div className="flex justify-between py-1 border-b border-white/5">
                       <span className="text-slate-400">MAE (Defects):</span>
                       <span className="font-semibold text-indigo-300">{metrics.storyBugs?.mae !== undefined ? metrics.storyBugs.mae.toFixed(2) : "1.4"}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-white/5">
+                      <span className="text-slate-400">MAE (Test Volume):</span>
+                      <span className="font-semibold text-indigo-300">{metrics.totalTestsByApplication?.mae !== undefined ? metrics.totalTestsByApplication.mae.toFixed(1) : "15.0"}</span>
                     </div>
                     <div className="flex justify-between py-1">
                       <span className="text-slate-400">Goodness-of-Fit (R²):</span>
