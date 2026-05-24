@@ -320,8 +320,18 @@ async def trigger_seeding(
 ):
     """Manually trigger data seeding for Project Pegasus and Project Orion."""
     try:
+        from app.db.models import TestReport
+        from sqlalchemy.future import select
+        # Check if project data exists before seeding
+        result = await db.execute(select(TestReport).filter(TestReport.projectName == "Project Pegasus"))
+        existing = result.scalars().first()
+        
         await seed_all(db)
-        return {"status": "success", "message": "Database seed completed successfully (or skipped if already populated)."}
+        
+        if existing:
+            return {"status": "success", "message": "Demo dataset already loaded"}
+        else:
+            return {"status": "success", "message": "Fresh demo dataset loaded"}
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

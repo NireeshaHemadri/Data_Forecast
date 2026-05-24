@@ -111,6 +111,9 @@ export default function App() {
   const [isRetraining, setIsRetraining] = useState<boolean>(false);
   const [submitSuccess, setSubmitSuccess] = useState<boolean>(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  
+  // Toast notifications for demo load operations
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
   // File Upload State
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -225,6 +228,7 @@ export default function App() {
         headers: { "Authorization": `Bearer ${API_TOKEN}` }
       });
       if (!res.ok) throw new Error("Seeding failed.");
+      const responseData = await res.json();
       
       const projectsRes = await fetch(`${API_BASE}/projects`, {
         headers: { "Authorization": `Bearer ${API_TOKEN}` }
@@ -238,8 +242,19 @@ export default function App() {
           await loadForecastData(targetProj);
         }
       }
+      
+      setToastMessage({
+        type: 'success',
+        text: responseData.message || "Demo dataset loaded successfully."
+      });
+      setTimeout(() => setToastMessage(null), 4000);
     } catch (err: any) {
       setError(`Seeding error: ${err.message}`);
+      setToastMessage({
+        type: 'error',
+        text: `Seeding error: ${err.message}`
+      });
+      setTimeout(() => setToastMessage(null), 4000);
       setLoading(false);
     } finally {
       setIsSeeding(false);
@@ -550,6 +565,23 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 animate-slide-down">
+          <div className={`px-4 py-2.5 rounded-xl border backdrop-blur-md shadow-lg flex items-center gap-2 text-xs font-bold ${
+            toastMessage.type === 'error' 
+              ? 'bg-rose-500/10 border-rose-500/30 text-rose-300' 
+              : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+          }`}>
+            {toastMessage.type === 'error' ? (
+              <AlertCircle className="h-4 w-4 text-rose-400" />
+            ) : (
+              <CheckCircle className="h-4 w-4 text-emerald-400" />
+            )}
+            {toastMessage.text}
+          </div>
+        </div>
+      )}
       {/* Top Navigation */}
       <header className="glass-panel border-b border-white/5 sticky top-0 z-40 backdrop-blur-md px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
