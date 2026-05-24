@@ -219,14 +219,28 @@ export default function App() {
     try {
       setIsSeeding(true);
       setError(null);
+      setLoading(true);
       const res = await fetch(`${API_BASE}/admin/seed-sample-data`, { 
         method: "POST",
         headers: { "Authorization": `Bearer ${API_TOKEN}` }
       });
       if (!res.ok) throw new Error("Seeding failed.");
-      await loadProjects();
+      
+      const projectsRes = await fetch(`${API_BASE}/projects`, {
+        headers: { "Authorization": `Bearer ${API_TOKEN}` }
+      });
+      if (projectsRes.ok) {
+        const data = await projectsRes.json();
+        setProjects(data);
+        if (data.length > 0) {
+          const targetProj = data[0];
+          setActiveProject(targetProj);
+          await loadForecastData(targetProj);
+        }
+      }
     } catch (err: any) {
       setError(`Seeding error: ${err.message}`);
+      setLoading(false);
     } finally {
       setIsSeeding(false);
     }
@@ -559,15 +573,6 @@ export default function App() {
             >
               Forecast
             </button>
-            <button 
-              onClick={() => {
-                setIsFormOpen(true);
-                setFormTab("manual");
-              }}
-              className="text-xs font-medium text-slate-400 hover:text-white transition-colors"
-            >
-              Weekly Reports
-            </button>
           </nav>
         </div>
 
@@ -631,17 +636,6 @@ export default function App() {
             {isRetraining ? 'Retraining...' : 'Retrain AI Model'}
           </button>
 
-          {/* Upload CSV Toggle */}
-          <button 
-            onClick={() => { setIsFormOpen(true); setFormTab("csv"); }}
-            disabled={historicalData.length === 0}
-            className="flex items-center gap-2 bg-[#16182c] border border-white/15 hover:border-white/20 disabled:opacity-50 text-slate-300 hover:text-white rounded-lg text-xs px-3.5 py-2 font-semibold transition-all"
-            title="Upload historical reports from CSV"
-          >
-            <UploadCloud className="h-3.5 w-3.5 text-indigo-400" />
-            Upload Weekly CSV
-          </button>
-
           {/* Add Weekly Report Toggle */}
           <button 
             onClick={() => { setIsFormOpen(true); setFormTab("manual"); }}
@@ -682,10 +676,17 @@ export default function App() {
         )}
 
         {loading ? (
-          <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="md:col-span-4 h-24 shimmer-bg rounded-2xl"></div>
-            <div className="md:col-span-3 h-[450px] shimmer-bg rounded-2xl"></div>
-            <div className="h-[450px] shimmer-bg rounded-2xl"></div>
+          <div className="flex-1 flex flex-col items-center justify-center min-h-[450px] gap-5 text-center py-12 glass-panel rounded-2xl border border-white/5 animate-pulse-slow">
+            <div className="relative flex items-center justify-center">
+              <div className="animate-spin rounded-full h-14 w-14 border-t-2 border-b-2 border-indigo-500"></div>
+              <Sparkles className="h-6 w-6 text-indigo-400 absolute" />
+            </div>
+            <div className="flex flex-col gap-1.5 max-w-sm px-6">
+              <h3 className="text-sm font-bold text-white tracking-wide uppercase">Syncing Aegis Forecasts</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Loading project QA data, engineering historical time lags, and training RandomForestRegressor models to construct recursive forecasts...
+              </p>
+            </div>
           </div>
         ) : (
           <>
@@ -847,11 +848,14 @@ export default function App() {
                       />
                       <Tooltip 
                         contentStyle={{ 
-                          backgroundColor: '#121424', 
+                          backgroundColor: '#0e101a', 
                           borderColor: 'rgba(255,255,255,0.08)',
                           borderRadius: '12px',
-                          color: '#fff'
+                          color: '#fff',
+                          boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.4)'
                         }} 
+                        labelStyle={{ fontWeight: 'bold', color: '#fff', marginBottom: '6px' }}
+                        itemStyle={{ color: '#e2e8f0', fontSize: '11px', padding: '2px 0' }}
                       />
                       
                       {chartMetric === "bugs" && (
