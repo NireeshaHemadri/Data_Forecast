@@ -84,6 +84,40 @@ const getWeekNumber = (date: Date) => {
   return Math.ceil((date.getDay() + 1 + numberOfDays) / 7);
 };
 
+function useCountUp(target: number, duration: number = 800) {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    let start = 0;
+    const end = Math.round(target);
+    if (end <= 0) {
+      setCount(0);
+      return;
+    }
+    if (start === end) {
+      setCount(end);
+      return;
+    }
+
+    const step = end > 100 ? Math.ceil(end / 30) : 1;
+    const intervalTime = end > 100 ? Math.floor(duration / 30) : Math.floor(duration / end) || 20;
+
+    const timer = setInterval(() => {
+      start += step;
+      if (start >= end) {
+        clearInterval(timer);
+        setCount(end);
+      } else {
+        setCount(start);
+      }
+    }, intervalTime);
+
+    return () => clearInterval(timer);
+  }, [target, duration]);
+
+  return count;
+}
+
 export default function App() {
   // Application State
   const [projects, setProjects] = useState<string[]>([]);
@@ -96,6 +130,15 @@ export default function App() {
   const [lastTrained, setLastTrained] = useState<string>("22 May 2026");
   const [trainingSamples, setTrainingSamples] = useState<number>(52);
   const [forecastHorizon, setForecastHorizon] = useState<number>(4);
+
+
+  // Modals Toggles
+  const [isArchOpen, setIsArchOpen] = useState<boolean>(false);
+  const [isHowItWorksOpen, setIsHowItWorksOpen] = useState<boolean>(false);
+
+  // Weekly Reports Pagination
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [reportSearch, setReportSearch] = useState<string>("");
 
   const r2Val = metrics.storyBugs?.r2 !== undefined ? metrics.storyBugs.r2.toFixed(2) : "0.85";
   
@@ -162,11 +205,13 @@ export default function App() {
     mrBugs: 4
   });
 
+
+
   // Check API health and retrieve projects list
   const loadProjects = async () => {
     try {
       setLoading(true);
-      setError(null);
+
       const res = await fetch(`${API_BASE}/projects`, {
         headers: { "Authorization": `Bearer ${API_TOKEN}` }
       });
@@ -192,7 +237,7 @@ export default function App() {
     if (!projectName) return;
     try {
       setLoading(true);
-      setError(null);
+
       const res = await fetch(`${API_BASE}/projects/${encodeURIComponent(projectName)}/forecast`, {
         headers: { "Authorization": `Bearer ${API_TOKEN}` }
       });
@@ -207,6 +252,7 @@ export default function App() {
       setLastTrained(data.lastTrained || "22 May 2026");
       setTrainingSamples(data.trainingSamples || 52);
       setForecastHorizon(data.forecastHorizon || 4);
+
       
       setNewReport(prev => ({ ...prev, projectName }));
       setLoading(false);
@@ -550,6 +596,13 @@ export default function App() {
 
   const highlights = getHighlights();
 
+  // Animated KPI count-up metrics
+  const countedSamples = useCountUp(trainingSamples);
+  const countedBugs = useCountUp(highlights ? highlights.bugs.val : 0);
+  const countedBugsConfidence = useCountUp(highlights ? highlights.bugs.confidence : 0);
+  const countedTests = useCountUp(highlights ? highlights.tests.val : 0);
+  const countedTestsConfidence = useCountUp(highlights ? highlights.tests.confidence : 0);
+
   const formatFeatureName = (name: string) => {
     switch(name) {
       case "lag_1": return "Last Week Performance";
@@ -562,6 +615,24 @@ export default function App() {
       default: return name;
     }
   };
+  const formatProjectName = (name: string) => {
+    if (name === "Project Pegasus") return "Project Pegasus (E-commerce)";
+    if (name === "Project Orion") return "Project Orion (Banking)";
+    return name;
+  };
+
+  const filteredReports = historicalData
+    .filter(r => {
+      const search = reportSearch.toLowerCase();
+      const matchAuthor = r.authors?.toLowerCase().includes(search);
+      const matchDate = new Date(r.createdAt).toLocaleDateString().includes(search);
+      return matchAuthor || matchDate;
+    })
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()); // newest first
+
+  const reportsPerPage = 10;
+  const totalPages = Math.ceil(filteredReports.length / reportsPerPage);
+  const paginatedReports = filteredReports.slice((currentPage - 1) * reportsPerPage, currentPage * reportsPerPage);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -594,17 +665,52 @@ export default function App() {
             </h1>
             <p className="text-xs text-slate-400 font-medium">AI-Powered Weekly QA Forecasting Platform</p>
           </div>
-          <nav className="hidden md:flex items-center gap-6 ml-8 border-l border-white/10 pl-6">
-            <button className="text-xs font-bold text-indigo-400 transition-colors">Dashboard</button>
+          <nav className="hidden lg:flex items-center gap-6 ml-8 border-l border-white/10 pl-6">
+            <button 
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              className="text-xs font-bold text-indigo-400 transition-colors cursor-pointer"
+            >
+              Dashboard
+            </button>
             <button 
               onClick={() => {
                 const el = document.querySelector('.lg\\:col-span-2');
                 el?.scrollIntoView({ behavior: 'smooth' });
               }}
-              className="text-xs font-medium text-slate-400 hover:text-white transition-colors"
+              className="text-xs font-medium text-slate-400 hover:text-white transition-colors cursor-pointer"
             >
               Forecast
             </button>
+            <button 
+              onClick={() => {
+                const el = document.getElementById('weekly-reports-section');
+                el?.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="text-xs font-medium text-slate-400 hover:text-white transition-colors cursor-pointer"
+            >
+              Weekly Reports
+            </button>
+            <button 
+              onClick={() => setIsHowItWorksOpen(true)}
+              className="text-xs font-medium text-slate-400 hover:text-white transition-colors cursor-pointer"
+            >
+              How it Works
+            </button>
+            <button 
+              onClick={() => setIsArchOpen(true)}
+              className="text-xs font-medium text-slate-400 hover:text-white transition-colors cursor-pointer"
+            >
+              Architecture
+            </button>
+            <a 
+              href={`${API_BASE.replace(/\/api$/, '')}/docs`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-medium text-slate-400 hover:text-white transition-colors cursor-pointer"
+              title="View FastAPI Swagger Interactive API Documentation"
+            >
+              API Docs
+            </a>
           </nav>
         </div>
 
@@ -619,75 +725,26 @@ export default function App() {
                 onChange={(e) => setActiveProject(e.target.value)}
               >
                 {projects.map(p => (
-                  <option key={p} value={p}>{p}</option>
+                  <option key={p} value={p}>{formatProjectName(p)}</option>
                 ))}
               </select>
             </div>
           )}
 
-          {/* API Docs */}
-          <a 
-            href={`${API_BASE.replace(/\/api$/, '')}/docs`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 bg-[#16182c] border border-white/15 hover:border-white/20 text-slate-300 hover:text-white rounded-lg text-xs px-3.5 py-2 font-semibold transition-all"
-            title="View FastAPI Swagger Interactive API Documentation"
-          >
-            <FileText className="h-3.5 w-3.5 text-indigo-400" />
-            API Docs
-          </a>
-
-          {/* Export Forecast Report */}
-          <button 
-            onClick={handleExportCSV}
-            disabled={historicalData.length === 0}
-            className="flex items-center gap-2 bg-[#16182c] border border-white/15 hover:border-white/20 disabled:opacity-50 text-slate-300 hover:text-white rounded-lg text-xs px-3.5 py-2 font-semibold transition-all"
-            title="Download report as CSV"
-          >
-            <Download className="h-3.5 w-3.5" />
-            Export Forecast Report
-          </button>
-
-          {/* Seed Utility */}
-          <button
-            onClick={handleSeedData}
-            disabled={isSeeding}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800 text-[11px] font-bold text-white hover:bg-slate-700 hover:border-slate-600 transition-all cursor-pointer select-none disabled:opacity-50 disabled:cursor-not-allowed uppercase shadow-lg shadow-black/10 shrink-0"
-          >
-            <Database className={`h-3.5 w-3.5 ${isSeeding ? 'animate-spin' : ''}`} />
-            {isSeeding ? 'Resetting...' : 'Reset Demo Dataset'}
-          </button>
-
-          {/* Retrain Trigger */}
-          <button 
-            onClick={handleRetrainModel}
-            disabled={isRetraining || historicalData.length === 0}
-            className="flex items-center gap-2 bg-[#16182c] border border-white/15 hover:border-white/20 active:bg-slate-800 disabled:opacity-50 text-slate-300 hover:text-white rounded-lg text-xs px-3.5 py-2 font-semibold transition-all"
-          >
-            <Settings className={`h-3.5 w-3.5 ${isRetraining ? 'animate-spin' : ''}`} />
-            {isRetraining ? 'Retraining...' : 'Retrain AI Model'}
-          </button>
 
           {/* Add Weekly Report Toggle */}
           <button 
             onClick={() => { setIsFormOpen(true); setFormTab("manual"); }}
-            className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-lg text-xs px-4 py-2 font-bold shadow-md shadow-indigo-900/40 hover:shadow-indigo-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
+            className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-lg text-xs px-4 py-2 font-bold shadow-md shadow-indigo-900/40 hover:shadow-indigo-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all shrink-0 cursor-pointer"
           >
             <Plus className="h-4 w-4" />
             Add Weekly Data
           </button>
-
-          <div className="flex items-center gap-1.5 pl-2 border-l border-white/10">
-            <span className={`h-2.5 w-2.5 rounded-full ${error && !activeProject ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500 animate-pulse-slow'}`}></span>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider hidden md:inline">
-              {error && !activeProject ? 'Disconnected' : 'Live'}
-            </span>
-          </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 max-w-[1600px] w-full mx-auto px-6 py-8 flex flex-col gap-6">
+      <main className="flex-1 max-w-[1600px] w-full mx-auto px-8 py-10 flex flex-col gap-8">
         
         {error && (
           <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-4 flex gap-3 text-rose-300 animate-fade-in">
@@ -707,16 +764,94 @@ export default function App() {
           </div>
         )}
 
-        {loading ? (
-          <div className="flex-1 flex flex-col items-center justify-center min-h-[450px] gap-5 text-center py-12 glass-panel rounded-2xl border border-white/5 animate-pulse-slow">
+        {loading && !isSeeding && !isRetraining ? (
+          <div className="flex-1 flex flex-col gap-8 animate-pulse select-none">
+            {/* Shimmer Top Loading Banner */}
+            <div className="bg-indigo-600/10 border border-indigo-500/20 rounded-2xl p-4 flex items-center justify-between gap-4 animate-pulse">
+              <div className="flex items-center gap-3">
+                <div className="relative flex items-center justify-center shrink-0">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div>
+                  <Sparkles className="h-4 w-4 text-indigo-400 absolute" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-white uppercase tracking-wider">Syncing Aegis Predictive Forecasts</h4>
+                  <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed">
+                    Loading project QA records, engineering autoregressive time lags, and fitting RandomForestRegressor models...
+                  </p>
+                </div>
+              </div>
+              <span className="text-[9px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded font-bold uppercase select-none">AI Pipeline Active</span>
+            </div>
+
+            {/* KPI Shimmer Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="bg-white/[0.02] border border-white/5 rounded-2xl h-32 p-5 flex flex-col justify-between">
+                  <div className="flex justify-between items-center">
+                    <div className="h-3 w-24 bg-white/10 rounded-md"></div>
+                    <div className="h-4 w-12 bg-white/10 rounded-full"></div>
+                  </div>
+                  <div className="h-8 w-32 bg-white/15 rounded-lg"></div>
+                  <div className="h-3 w-40 bg-white/5 rounded-md"></div>
+                </div>
+              ))}
+            </div>
+
+            {/* Chart & Sidebar Shimmer Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+              {/* Chart Shimmer */}
+              <div className="lg:col-span-2 bg-white/[0.02] border border-white/5 rounded-2xl h-[480px] p-8 flex flex-col gap-6">
+                <div className="flex justify-between items-center border-b border-white/5 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-5 w-5 bg-white/10 rounded-full"></div>
+                    <div className="flex flex-col gap-2">
+                      <div className="h-4 w-64 bg-white/15 rounded-md"></div>
+                      <div className="h-3 w-48 bg-white/10 rounded-md"></div>
+                    </div>
+                  </div>
+                  <div className="h-8 w-24 bg-white/10 rounded-lg"></div>
+                </div>
+                <div className="flex-1 bg-white/[0.01] rounded-xl flex items-center justify-center">
+                  <div className="h-2/3 w-11/12 border-b border-l border-white/5 relative">
+                    <div className="absolute bottom-1/4 left-1/4 right-1/4 h-20 bg-indigo-500/5 rounded-t-3xl border-t border-indigo-500/10 border-dashed"></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sidebar Cards Shimmer */}
+              <div className="flex flex-col gap-8">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="bg-white/[0.02] border border-white/5 rounded-2xl h-44 p-6 flex flex-col gap-4">
+                    <div className="border-b border-white/5 pb-3">
+                      <div className="h-4 w-32 bg-white/15 rounded-md"></div>
+                    </div>
+                    <div className="flex flex-col gap-2.5">
+                      <div className="h-3 w-full bg-white/10 rounded-md"></div>
+                      <div className="h-3 w-5/6 bg-white/10 rounded-md"></div>
+                      <div className="h-3 w-2/3 bg-white/5 rounded-md"></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : loading ? (
+          /* Seeding/Retraining custom action loaders */
+          <div className="flex-1 flex flex-col items-center justify-center min-h-[450px] gap-5 text-center py-12 glass-panel rounded-2xl border border-white/5 animate-pulse-slow select-none">
             <div className="relative flex items-center justify-center">
               <div className="animate-spin rounded-full h-14 w-14 border-t-2 border-b-2 border-indigo-500"></div>
               <Sparkles className="h-6 w-6 text-indigo-400 absolute" />
             </div>
             <div className="flex flex-col gap-1.5 max-w-sm px-6">
-              <h3 className="text-sm font-bold text-white tracking-wide uppercase">Syncing Aegis Forecasts</h3>
+              <h3 className="text-sm font-bold text-white tracking-wide uppercase">
+                {isSeeding ? "Resetting Demo Dataset" : isRetraining ? "Retraining AI Model" : "Syncing Aegis Forecasts"}
+              </h3>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Loading project QA data, engineering historical time lags, and training RandomForestRegressor models to construct recursive forecasts...
+                {isSeeding 
+                  ? "Wiping custom historical reports, generating standardized test runs, and pre-compiling prediction caches..." 
+                  : isRetraining 
+                    ? "Fitting RandomForestRegressor estimators, running cross-validation, and calculating SHAP values..." 
+                    : "Loading project QA data, engineering historical time lags, and training RandomForestRegressor models..."}
               </p>
             </div>
           </div>
@@ -724,7 +859,7 @@ export default function App() {
           <>
             {/* Highlights Grid */}
             {highlights && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 animate-slide-up">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 animate-slide-up">
                 
                 {/* Highlight 1: Weekly Reports Processed */}
                 <div className="glass-panel glass-panel-hover rounded-2xl p-5 relative overflow-hidden">
@@ -736,7 +871,7 @@ export default function App() {
                     <span className="bg-indigo-500/10 text-indigo-400 text-[10px] px-2 py-0.5 rounded-full font-bold border border-indigo-500/20">Data Volume</span>
                   </div>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold tracking-tight text-white">{trainingSamples} Reports</span>
+                    <span className="text-3xl font-bold tracking-tight text-white">{countedSamples} Reports</span>
                   </div>
                   <p className="text-xs text-slate-400 mt-2">Total historical QA data volume ingested.</p>
                 </div>
@@ -753,18 +888,18 @@ export default function App() {
                   <div className="flex flex-col gap-1.5">
                     <div className="flex items-baseline gap-2">
                       <span className="text-3xl font-bold tracking-tight text-white">
-                        {highlights.bugs.val} ± {highlights.bugs.error} Bugs
+                        {countedBugs} ± {highlights.bugs.error} Bugs
                       </span>
                     </div>
                     <div className="flex items-baseline gap-2 border-t border-white/5 pt-1.5">
                       <span className="text-xs font-semibold text-slate-400">Tests:</span>
                       <span className="text-lg font-bold text-slate-200">
-                        {highlights.tests.val} ± {highlights.tests.error}
+                        {countedTests} ± {highlights.tests.error}
                       </span>
                     </div>
                   </div>
                   <p className="text-xs text-slate-400 mt-2">
-                    Weekly defect influx. Confidence: <span className="font-semibold text-indigo-300">{highlights.bugs.confidence}%</span>
+                    Weekly defect influx. Confidence: <span className="font-semibold text-indigo-300">{countedBugsConfidence}%</span>
                   </p>
                 </div>
 
@@ -779,13 +914,13 @@ export default function App() {
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-bold tracking-tight text-white">{highlights.bugs.confidence}%</span>
+                      <span className="text-3xl font-bold tracking-tight text-white">{countedBugsConfidence}%</span>
                       <span className="text-xs font-semibold text-slate-400 uppercase ml-1.5">Bugs</span>
                     </div>
                     <div className="flex items-baseline gap-2 border-t border-white/5 pt-1.5">
                       <span className="text-xs font-semibold text-slate-400">Tests:</span>
                       <span className="text-lg font-bold text-slate-200 ml-1.5">
-                        {highlights.tests.confidence}%
+                        {countedTestsConfidence}%
                       </span>
                     </div>
                   </div>
@@ -811,219 +946,288 @@ export default function App() {
             )}
 
             {/* Split Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
               
-              {/* Left Column: Forecast Chart */}
-              <div className="lg:col-span-2 glass-panel rounded-2xl p-6 flex flex-col gap-6 animate-slide-up">
-                <div className="flex items-center justify-between border-b border-white/5 pb-4">
-                  <div className="flex items-center gap-2">
-                    <BarChart4 className="h-5 w-5 text-indigo-400" />
+              {/* Left Column: Forecast Chart & Observability Meta (7/12 width ≈ 60%) */}
+              <div className="lg:col-span-7 flex flex-col gap-8">
+                {/* Forecast Chart */}
+                <div className="glass-panel rounded-2xl p-8 flex flex-col gap-8 animate-slide-up">
+                  <div className="flex items-center justify-between border-b border-white/5 pb-4">
+                    <div className="flex items-center gap-2">
+                      <BarChart4 className="h-5 w-5 text-indigo-400" />
+                      <div>
+                        <h2 className="text-lg font-bold text-white">Historical Weekly Reports → Next 4-Week AI Forecast</h2>
+                        <p className="text-xs text-slate-400">Time-series forecasting mapping weekly trends to next month predictions</p>
+                      </div>
+                    </div>
+                    
+                    {/* Metric Toggle */}
+                    <div className="flex bg-[#121424] border border-white/10 p-0.5 rounded-xl text-xs font-semibold">
+                      <button 
+                        onClick={() => setChartMetric("bugs")}
+                        className={`px-3 py-1.5 rounded-lg transition-all ${chartMetric === "bugs" ? 'bg-indigo-600 text-white shadow-md shadow-indigo-900/40' : 'text-slate-400 hover:text-slate-200'}`}
+                      >
+                        Bugs
+                      </button>
+                      <button 
+                        onClick={() => setChartMetric("tests")}
+                        className={`px-3 py-1.5 rounded-lg transition-all ${chartMetric === "tests" ? 'bg-indigo-600 text-white shadow-md shadow-indigo-900/40' : 'text-slate-400 hover:text-slate-200'}`}
+                      >
+                        Test Scope
+                      </button>
+                      <button 
+                        onClick={() => setChartMetric("arRate")}
+                        className={`px-3 py-1.5 rounded-lg transition-all ${chartMetric === "arRate" ? 'bg-indigo-600 text-white shadow-md shadow-indigo-900/40' : 'text-slate-400 hover:text-slate-200'}`}
+                      >
+                        AR Pass %
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Graph Canvas */}
+                  <div className="h-[360px] w-full text-xs font-medium">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.25}/>
+                            <stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="colorForecast" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#d946ef" stopOpacity={0.25}/>
+                            <stop offset="95%" stopColor="#d946ef" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="colorCI" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#d946ef" stopOpacity={0.08}/>
+                            <stop offset="95%" stopColor="#d946ef" stopOpacity={0.01}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
+                        <XAxis 
+                          dataKey="date" 
+                          stroke="rgba(255,255,255,0.4)" 
+                          dy={10} 
+                          tickLine={false} 
+                        />
+                        <YAxis 
+                          stroke="rgba(255,255,255,0.4)" 
+                          dx={-5} 
+                          tickLine={false} 
+                          axisLine={false}
+                        />
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: '#0e101a', 
+                            borderColor: 'rgba(255,255,255,0.08)',
+                            borderRadius: '12px',
+                            color: '#fff',
+                            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.4)'
+                          }} 
+                          labelStyle={{ fontWeight: 'bold', color: '#fff', marginBottom: '6px' }}
+                          itemStyle={{ color: '#e2e8f0', fontSize: '11px', padding: '2px 0' }}
+                        />
+                        
+                        {chartMetric === "bugs" && (
+                          <>
+                            <Area 
+                              type="monotone" 
+                              name="Actual Bugs"
+                              dataKey="bugsActual" 
+                              stroke="#6366f1" 
+                              strokeWidth={2.5}
+                              fillOpacity={1} 
+                              fill="url(#colorActual)" 
+                            />
+                            <Area 
+                              type="monotone" 
+                              name="AI Forecasted Bugs"
+                              dataKey="bugsForecast" 
+                              stroke="#d946ef" 
+                              strokeWidth={2.5}
+                              strokeDasharray="4 4"
+                              fillOpacity={1} 
+                              fill="url(#colorForecast)" 
+                            />
+                            {/* Uncertainty Bounds Display */}
+                            <Area 
+                              type="monotone" 
+                              name="Uncertainty Range Upper"
+                              dataKey="bugsUpper" 
+                              stroke="rgba(217, 70, 239, 0.2)" 
+                              strokeWidth={1}
+                              fillOpacity={1} 
+                              fill="url(#colorCI)" 
+                            />
+                            <Area 
+                              type="monotone" 
+                              name="Uncertainty Range Lower"
+                              dataKey="bugsLower" 
+                              stroke="rgba(217, 70, 239, 0.2)" 
+                              strokeWidth={1}
+                              fill="none" 
+                            />
+                          </>
+                        )}
+
+                        {chartMetric === "tests" && (
+                          <>
+                            <Area 
+                              type="monotone" 
+                              name="Actual Weekly Test Volume"
+                              dataKey="testsActual" 
+                              stroke="#6366f1" 
+                              strokeWidth={2.5}
+                              fillOpacity={0.2} 
+                              fill="url(#colorActual)" 
+                            />
+                            <Area 
+                              type="monotone" 
+                              name="Predicted Weekly Test Volume"
+                              dataKey="testsForecast" 
+                              stroke="#d946ef" 
+                              strokeWidth={2.5}
+                              strokeDasharray="4 4"
+                              fillOpacity={0.2} 
+                              fill="url(#colorForecast)" 
+                            />
+                            {/* Uncertainty Bounds Display for Tests */}
+                            <Area 
+                              type="monotone" 
+                              name="Uncertainty Range Upper"
+                              dataKey="testsUpper" 
+                              stroke="rgba(217, 70, 239, 0.2)" 
+                              strokeWidth={1}
+                              fillOpacity={1} 
+                              fill="url(#colorCI)" 
+                            />
+                            <Area 
+                              type="monotone" 
+                              name="Uncertainty Range Lower"
+                              dataKey="testsLower" 
+                              stroke="rgba(217, 70, 239, 0.2)" 
+                              strokeWidth={1}
+                              fill="none" 
+                            />
+                          </>
+                        )}
+
+                        {chartMetric === "arRate" && (
+                          <>
+                            <Area 
+                              type="monotone" 
+                              name="Actual Automation Pass %"
+                              dataKey="arRateActual" 
+                              stroke="#10b981" 
+                              strokeWidth={2.5}
+                              fillOpacity={0.1} 
+                              fill="#10b981"
+                            />
+                            <Area 
+                              type="monotone" 
+                              name="AI Forecasted Automation Pass %"
+                              dataKey="arRateForecast" 
+                              stroke="#d946ef" 
+                              strokeWidth={2.5}
+                              strokeDasharray="4 4"
+                              fillOpacity={0.1} 
+                              fill="#d946ef"
+                            />
+                          </>
+                        )}
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                  
+                  <div className="flex items-center justify-between text-xs text-slate-400 mt-2 border-t border-white/5 pt-4">
+                    <div className="flex gap-4">
+                      <span className="flex items-center gap-1.5">
+                        <span className="h-2 w-4 bg-indigo-500 rounded-sm"></span> Actuals (Weeks 1 to {historicalData.length})
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="h-2 w-4 border border-dashed border-pink-500 rounded-sm"></span> Forecast (Next 4 Weeks)
+                      </span>
+                      {(chartMetric === "bugs" || chartMetric === "tests") && (
+                        <span className="flex items-center gap-1.5">
+                          <span className="h-2.5 w-4 bg-pink-500/10 border border-pink-500/20 rounded-sm"></span> Uncertainty Margin (95% CI)
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-slate-500 italic">Models updated dynamically on weekly data ingest.</span>
+                  </div>
+                </div>
+
+                {/* AI Model Details Panel */}
+                <div className="glass-panel rounded-2xl p-8 flex flex-col gap-6 animate-slide-up">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-white/5 pb-3.5 gap-4">
                     <div>
-                      <h2 className="text-lg font-bold text-white">Historical Weekly Reports → Next 4-Week AI Forecast</h2>
-                      <p className="text-xs text-slate-400">Time-series forecasting mapping weekly trends to next month predictions</p>
+                      <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                        <Settings className="h-4 w-4 text-indigo-400" /> AI Model Details
+                      </h3>
+                      <p className="text-[11px] text-slate-400 mt-0.5">Observability stats for active forecaster model</p>
+                    </div>
+                    
+                    {/* Actions relocated to prevent header overcrowding */}
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={handleRetrainModel}
+                        disabled={isRetraining || historicalData.length === 0}
+                        className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-xs py-1.5 px-3 font-bold transition-all shadow-md shadow-indigo-900/20 cursor-pointer"
+                        title="Retrain RandomForest forecasting model on the current dataset"
+                      >
+                        <Settings className={`h-3.5 w-3.5 ${isRetraining ? 'animate-spin' : ''}`} />
+                        {isRetraining ? 'Retraining...' : 'Retrain AI'}
+                      </button>
+                      
+                      <button
+                        onClick={handleSeedData}
+                        disabled={isSeeding}
+                        className="flex items-center gap-1.5 bg-[#16182c] border border-white/10 hover:border-white/20 text-slate-300 hover:text-white rounded-lg text-xs py-1.5 px-3 font-semibold transition-all cursor-pointer disabled:opacity-50"
+                        title="Wipe custom edits and reset the system with database seed templates"
+                      >
+                        <Database className={`h-3.5 w-3.5 ${isSeeding ? 'animate-spin' : ''}`} />
+                        {isSeeding ? 'Resetting...' : 'Reset Demo'}
+                      </button>
                     </div>
                   </div>
                   
-                  {/* Metric Toggle */}
-                  <div className="flex bg-[#121424] border border-white/10 p-0.5 rounded-xl text-xs font-semibold">
-                    <button 
-                      onClick={() => setChartMetric("bugs")}
-                      className={`px-3 py-1.5 rounded-lg transition-all ${chartMetric === "bugs" ? 'bg-indigo-600 text-white shadow-md shadow-indigo-900/40' : 'text-slate-400 hover:text-slate-200'}`}
-                    >
-                      Bugs
-                    </button>
-                    <button 
-                      onClick={() => setChartMetric("tests")}
-                      className={`px-3 py-1.5 rounded-lg transition-all ${chartMetric === "tests" ? 'bg-indigo-600 text-white shadow-md shadow-indigo-900/40' : 'text-slate-400 hover:text-slate-200'}`}
-                    >
-                      Test Scope
-                    </button>
-                    <button 
-                      onClick={() => setChartMetric("arRate")}
-                      className={`px-3 py-1.5 rounded-lg transition-all ${chartMetric === "arRate" ? 'bg-indigo-600 text-white shadow-md shadow-indigo-900/40' : 'text-slate-400 hover:text-slate-200'}`}
-                    >
-                      AR Pass %
-                    </button>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs text-slate-300">
+                    <div className="bg-white/[0.02] border border-white/5 rounded-xl p-3.5 flex flex-col gap-1 col-span-2">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Model Type</span>
+                      <span className="font-bold text-white text-xs sm:text-sm truncate" title={modelType}>{modelType}</span>
+                    </div>
+                    <div className="bg-white/[0.02] border border-white/5 rounded-xl p-3.5 flex flex-col gap-1">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Training Samples</span>
+                      <span className="font-bold text-indigo-300 text-xs sm:text-sm">{trainingSamples} weeks</span>
+                    </div>
+                    <div className="bg-white/[0.02] border border-white/5 rounded-xl p-3.5 flex flex-col gap-1">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Last Trained</span>
+                      <span className="font-bold text-indigo-300 text-xs sm:text-sm truncate" title={lastTrained}>{lastTrained}</span>
+                    </div>
+                    <div className="bg-white/[0.02] border border-white/5 rounded-xl p-3.5 flex flex-col gap-1">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Forecast Horizon</span>
+                      <span className="font-bold text-indigo-300 text-xs sm:text-sm">{forecastHorizon} weeks</span>
+                    </div>
+                    <div className="bg-white/[0.02] border border-white/5 rounded-xl p-3.5 flex flex-col gap-1">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">MAE (Defects)</span>
+                      <span className="font-bold text-indigo-300 text-xs sm:text-sm">{metrics.storyBugs?.mae !== undefined ? metrics.storyBugs.mae.toFixed(2) : "1.4"}</span>
+                    </div>
+                    <div className="bg-white/[0.02] border border-white/5 rounded-xl p-3.5 flex flex-col gap-1">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">MAE (Test Vol)</span>
+                      <span className="font-bold text-indigo-300 text-xs sm:text-sm">{metrics.totalTestsByApplication?.mae !== undefined ? metrics.totalTestsByApplication.mae.toFixed(1) : "15.0"}</span>
+                    </div>
+                    <div className="bg-white/[0.02] border border-white/5 rounded-xl p-3.5 flex flex-col gap-1">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Goodness-of-Fit (R²)</span>
+                      <span className="font-bold text-indigo-300 text-xs sm:text-sm">{r2Val}</span>
+                    </div>
                   </div>
-                </div>
-
-                {/* Graph Canvas */}
-                <div className="h-[360px] w-full text-xs font-medium">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.25}/>
-                          <stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="colorForecast" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#d946ef" stopOpacity={0.25}/>
-                          <stop offset="95%" stopColor="#d946ef" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="colorCI" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#d946ef" stopOpacity={0.08}/>
-                          <stop offset="95%" stopColor="#d946ef" stopOpacity={0.01}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
-                      <XAxis 
-                        dataKey="date" 
-                        stroke="rgba(255,255,255,0.4)" 
-                        dy={10} 
-                        tickLine={false} 
-                      />
-                      <YAxis 
-                        stroke="rgba(255,255,255,0.4)" 
-                        dx={-5} 
-                        tickLine={false} 
-                        axisLine={false}
-                      />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: '#0e101a', 
-                          borderColor: 'rgba(255,255,255,0.08)',
-                          borderRadius: '12px',
-                          color: '#fff',
-                          boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.4)'
-                        }} 
-                        labelStyle={{ fontWeight: 'bold', color: '#fff', marginBottom: '6px' }}
-                        itemStyle={{ color: '#e2e8f0', fontSize: '11px', padding: '2px 0' }}
-                      />
-                      
-                      {chartMetric === "bugs" && (
-                        <>
-                          <Area 
-                            type="monotone" 
-                            name="Actual Bugs"
-                            dataKey="bugsActual" 
-                            stroke="#6366f1" 
-                            strokeWidth={2.5}
-                            fillOpacity={1} 
-                            fill="url(#colorActual)" 
-                          />
-                          <Area 
-                            type="monotone" 
-                            name="AI Forecasted Bugs"
-                            dataKey="bugsForecast" 
-                            stroke="#d946ef" 
-                            strokeWidth={2.5}
-                            strokeDasharray="4 4"
-                            fillOpacity={1} 
-                            fill="url(#colorForecast)" 
-                          />
-                          {/* Uncertainty Bounds Display */}
-                          <Area 
-                            type="monotone" 
-                            name="Uncertainty Range Upper"
-                            dataKey="bugsUpper" 
-                            stroke="rgba(217, 70, 239, 0.2)" 
-                            strokeWidth={1}
-                            fillOpacity={1} 
-                            fill="url(#colorCI)" 
-                          />
-                          <Area 
-                            type="monotone" 
-                            name="Uncertainty Range Lower"
-                            dataKey="bugsLower" 
-                            stroke="rgba(217, 70, 239, 0.2)" 
-                            strokeWidth={1}
-                            fill="none" 
-                          />
-                        </>
-                      )}
-
-                      {chartMetric === "tests" && (
-                        <>
-                          <Area 
-                            type="monotone" 
-                            name="Actual Weekly Test Volume"
-                            dataKey="testsActual" 
-                            stroke="#6366f1" 
-                            strokeWidth={2.5}
-                            fillOpacity={0.2} 
-                            fill="url(#colorActual)" 
-                          />
-                          <Area 
-                            type="monotone" 
-                            name="Predicted Weekly Test Volume"
-                            dataKey="testsForecast" 
-                            stroke="#d946ef" 
-                            strokeWidth={2.5}
-                            strokeDasharray="4 4"
-                            fillOpacity={0.2} 
-                            fill="url(#colorForecast)" 
-                          />
-                          {/* Uncertainty Bounds Display for Tests */}
-                          <Area 
-                            type="monotone" 
-                            name="Uncertainty Range Upper"
-                            dataKey="testsUpper" 
-                            stroke="rgba(217, 70, 239, 0.2)" 
-                            strokeWidth={1}
-                            fillOpacity={1} 
-                            fill="url(#colorCI)" 
-                          />
-                          <Area 
-                            type="monotone" 
-                            name="Uncertainty Range Lower"
-                            dataKey="testsLower" 
-                            stroke="rgba(217, 70, 239, 0.2)" 
-                            strokeWidth={1}
-                            fill="none" 
-                          />
-                        </>
-                      )}
-
-                      {chartMetric === "arRate" && (
-                        <>
-                          <Area 
-                            type="monotone" 
-                            name="Actual Automation Pass %"
-                            dataKey="arRateActual" 
-                            stroke="#10b981" 
-                            strokeWidth={2.5}
-                            fillOpacity={0.1} 
-                            fill="#10b981"
-                          />
-                          <Area 
-                            type="monotone" 
-                            name="AI Forecasted Automation Pass %"
-                            dataKey="arRateForecast" 
-                            stroke="#d946ef" 
-                            strokeWidth={2.5}
-                            strokeDasharray="4 4"
-                            fillOpacity={0.1} 
-                            fill="#d946ef"
-                          />
-                        </>
-                      )}
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-                
-                <div className="flex items-center justify-between text-xs text-slate-400 mt-2 border-t border-white/5 pt-4">
-                  <div className="flex gap-4">
-                    <span className="flex items-center gap-1.5">
-                      <span className="h-2 w-4 bg-indigo-500 rounded-sm"></span> Actuals (Weeks 1 to {historicalData.length})
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="h-2 w-4 border border-dashed border-pink-500 rounded-sm"></span> Forecast (Next 4 Weeks)
-                    </span>
-                    {(chartMetric === "bugs" || chartMetric === "tests") && (
-                      <span className="flex items-center gap-1.5">
-                        <span className="h-2.5 w-4 bg-pink-500/10 border border-pink-500/20 rounded-sm"></span> Uncertainty Margin (95% CI)
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-[10px] text-slate-500 italic">Models updated dynamically on weekly data ingest.</span>
                 </div>
               </div>
 
-              {/* Right Column: AI Explainer & Model Comparisons */}
-              <div className="flex flex-col gap-6">
+              {/* Right Column: AI Explainer (5/12 width ≈ 40%) */}
+              <div className="lg:col-span-5 flex flex-col gap-8">
                 
                 {/* Interpretability Section */}
-                <div className="glass-panel rounded-2xl p-6 flex flex-col gap-5 animate-slide-up">
+                <div className="glass-panel rounded-2xl p-8 flex flex-col gap-6 animate-slide-up">
                   <div className="border-b border-white/5 pb-4">
                     <div className="flex items-center gap-2 mb-1">
                       <ShieldAlert className="h-5 w-5 text-indigo-400" />
@@ -1067,9 +1271,16 @@ export default function App() {
                             .map((feat) => {
                               const isPositive = feat.shapValue >= 0;
                               return (
-                                <div key={feat.featureName} className="flex justify-between items-center text-xs py-1 border-b border-white/5 last:border-0">
-                                  <span className="text-slate-300 font-medium">{formatFeatureName(feat.featureName)}</span>
-                                  <span className={`font-bold ${isPositive ? 'text-rose-400' : 'text-emerald-400'}`}>
+                                <div key={feat.featureName} className="flex justify-between items-start gap-4 text-xs py-2 border-b border-white/5 last:border-0 animate-fade-in">
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="text-slate-200 font-bold">{formatFeatureName(feat.featureName)}</span>
+                                    <span className="text-[10px] text-slate-500 font-normal leading-normal">{feat.description}</span>
+                                  </div>
+                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full select-none shrink-0 border ${
+                                    isPositive 
+                                      ? 'text-rose-400 bg-rose-500/10 border-rose-500/20' 
+                                      : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                                  }`}>
                                     {isPositive ? '+' : ''}{feat.shapValue.toFixed(1)}
                                   </span>
                                 </div>
@@ -1085,71 +1296,30 @@ export default function App() {
                   )}
                 </div>
 
-                {/* AI Model Details Panel */}
-                <div className="glass-panel rounded-2xl p-6 flex flex-col gap-4 animate-slide-up">
-                  <div className="border-b border-white/5 pb-3">
+                {/* Model Performance Panel */}
+                <div className="glass-panel rounded-2xl p-8 flex flex-col gap-6 animate-slide-up">
+                  <div className="border-b border-white/5 pb-3.5">
                     <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-                      <Settings className="h-4 w-4 text-indigo-400" /> AI Model Details
+                      <Layers className="h-4 w-4 text-indigo-400" /> Model Performance
                     </h3>
-                    <p className="text-[11px] text-slate-400 mt-0.5">Observability stats for active forecaster model</p>
-                  </div>
-                  
-                  <div className="flex flex-col gap-2 text-xs text-slate-300">
-                    <div className="flex justify-between py-1 border-b border-white/5">
-                      <span className="text-slate-400">Model Type:</span>
-                      <span className="font-bold text-white">{modelType}</span>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-white/5">
-                      <span className="text-slate-400">Training Samples:</span>
-                      <span className="font-semibold text-indigo-300">{trainingSamples} weekly samples</span>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-white/5">
-                      <span className="text-slate-400">Last Trained:</span>
-                      <span className="font-semibold text-indigo-300">{lastTrained}</span>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-white/5">
-                      <span className="text-slate-400">Forecast Horizon:</span>
-                      <span className="font-semibold text-indigo-300">{forecastHorizon} weeks</span>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-white/5">
-                      <span className="text-slate-400">MAE (Defects):</span>
-                      <span className="font-semibold text-indigo-300">{metrics.storyBugs?.mae !== undefined ? metrics.storyBugs.mae.toFixed(2) : "1.4"}</span>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-white/5">
-                      <span className="text-slate-400">MAE (Test Volume):</span>
-                      <span className="font-semibold text-indigo-300">{metrics.totalTestsByApplication?.mae !== undefined ? metrics.totalTestsByApplication.mae.toFixed(1) : "15.0"}</span>
-                    </div>
-                    <div className="flex justify-between py-1">
-                      <span className="text-slate-400">Goodness-of-Fit (R²):</span>
-                      <span className="font-semibold text-indigo-300">{r2Val}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Model Comparisons Panel */}
-                <div className="glass-panel rounded-2xl p-6 flex flex-col gap-4 animate-slide-up">
-                  <div className="border-b border-white/5 pb-3">
-                    <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-                      <Layers className="h-4 w-4 text-indigo-400" /> Model Performance Comparison
-                    </h3>
-                    <p className="text-[11px] text-slate-400 mt-0.5">Tested architectures against historical bug validation datasets</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Tested models against historical defect validation datasets</p>
                   </div>
                   
                   <div className="flex flex-col gap-2.5 text-xs">
                     <div className="flex justify-between items-center bg-[#121424] p-2.5 rounded-lg border border-indigo-500/30">
                       <span className="font-semibold text-white flex items-center gap-1">
-                        <span className="h-2 w-2 rounded-full bg-indigo-500"></span> RandomForestRegressor
+                        <span className="h-2 w-2 rounded-full bg-indigo-500"></span> RFRegressor
                       </span>
-                      <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded font-bold uppercase">Selected</span>
+                      <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded font-bold uppercase">Active</span>
                       <div className="text-right">
                         <div className="text-slate-300 font-bold">MAE: 1.4</div>
                         <div className="text-slate-400 text-[10px]">R²: 0.85</div>
                       </div>
                     </div>
 
-                    <div className="flex justify-between items-center bg-[#121424]/40 p-2.5 rounded-lg border border-white/5">
+                    <div className="flex justify-between items-center bg-[#121424]/40 p-2.5 rounded-lg border border-white/5 opacity-80">
                       <span className="text-slate-300 flex items-center gap-1">
-                        <span className="h-2 w-2 rounded-full bg-slate-500"></span> XGBoost Regressor
+                        <span className="h-2 w-2 rounded-full bg-slate-500"></span> XGBoost
                       </span>
                       <div className="text-right">
                         <div className="text-slate-400 font-medium">MAE: 2.1</div>
@@ -1157,9 +1327,9 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="flex justify-between items-center bg-[#121424]/40 p-2.5 rounded-lg border border-white/5">
+                    <div className="flex justify-between items-center bg-[#121424]/40 p-2.5 rounded-lg border border-white/5 opacity-80">
                       <span className="text-slate-300 flex items-center gap-1">
-                        <span className="h-2 w-2 rounded-full bg-slate-500"></span> Linear Regression
+                        <span className="h-2 w-2 rounded-full bg-slate-500"></span> Linear Reg
                       </span>
                       <div className="text-right">
                         <div className="text-slate-400 font-medium">MAE: 3.2</div>
@@ -1168,9 +1338,116 @@ export default function App() {
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
 
+            {/* Historical Weekly Reports Table */}
+            <div id="weekly-reports-section" className="glass-panel rounded-2xl p-8 flex flex-col gap-6 animate-slide-up">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-white/5 pb-4">
+                <div>
+                  <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                    <Database className="h-5 w-5 text-indigo-400" /> Historical Weekly QA Reports
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">Browse, search, and export historical test executions and defect logs</p>
+                </div>
+                
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Search Input */}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search reports..."
+                      className="bg-[#121424] border border-white/10 rounded-lg text-xs pl-8 pr-3 py-2 text-slate-200 placeholder-slate-500 outline-none focus:border-indigo-500 transition-colors w-48 sm:w-64"
+                      value={reportSearch}
+                      onChange={(e) => { setReportSearch(e.target.value); setCurrentPage(1); }}
+                    />
+                    <Sparkles className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-500" />
+                  </div>
+
+                  {/* Export CSV Button */}
+                  <button
+                    onClick={handleExportCSV}
+                    className="flex items-center gap-2 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 hover:text-indigo-300 border border-indigo-500/20 rounded-lg text-xs px-3.5 py-2 font-semibold transition-all shrink-0 cursor-pointer"
+                    title="Export all historical reports and forecasts to CSV"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Export CSV
+                  </button>
+                </div>
               </div>
 
+              {filteredReports.length > 0 ? (
+                <div className="w-full overflow-x-auto scrollbar-thin">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-white/10 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                        <th className="py-3 px-4">Week</th>
+                        <th className="py-3 px-4">Date</th>
+                        <th className="py-3 px-4">Authors</th>
+                        <th className="py-3 px-4 text-right">Story Tests</th>
+                        <th className="py-3 px-4 text-right">AR (Auto)</th>
+                        <th className="py-3 px-4 text-right">MR (Manual)</th>
+                        <th className="py-3 px-4 text-right">Total Tests</th>
+                        <th className="py-3 px-4 text-right">Story Bugs</th>
+                        <th className="py-3 px-4 text-right">AR Bugs</th>
+                        <th className="py-3 px-4 text-right">MR Bugs</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5 text-slate-300">
+                      {paginatedReports.map((report, idx) => {
+                        const globalIndex = filteredReports.length - ((currentPage - 1) * reportsPerPage + idx);
+                        return (
+                          <tr key={report.id || idx} className="hover:bg-white/[0.02] transition-colors">
+                            <td className="py-3.5 px-4 font-bold text-white">Wk {globalIndex}</td>
+                            <td className="py-3.5 px-4 text-slate-400">{new Date(report.createdAt).toLocaleDateString()}</td>
+                            <td className="py-3.5 px-4 font-medium max-w-[120px] truncate" title={report.authors}>{report.authors || "N/A"}</td>
+                            <td className="py-3.5 px-4 text-right font-mono">{report.storyTests}</td>
+                            <td className="py-3.5 px-4 text-right font-mono">{report.regressionTestsAutomated}</td>
+                            <td className="py-3.5 px-4 text-right font-mono">{report.regressionTestsManual}</td>
+                            <td className="py-3.5 px-4 text-right font-mono text-indigo-300 font-bold">{report.totalTestsByApplication}</td>
+                            <td className="py-3.5 px-4 text-right font-mono text-rose-300">{report.storyBugs}</td>
+                            <td className="py-3.5 px-4 text-right font-mono text-rose-400">{report.arBugs || report.arFailed || 0}</td>
+                            <td className="py-3.5 px-4 text-right font-mono text-rose-400">{report.mrBugs || 0}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="py-12 border border-dashed border-white/10 rounded-xl text-center text-slate-400 italic">
+                  No weekly reports found matching "{reportSearch}".
+                </div>
+              )}
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex justify-between items-center border-t border-white/5 pt-4 text-xs font-semibold text-slate-400">
+                  <span>
+                    Showing {reportsPerPage * (currentPage - 1) + 1} - {Math.min(reportsPerPage * currentPage, filteredReports.length)} of {filteredReports.length} reports
+                  </span>
+                  
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                      disabled={currentPage === 1}
+                      className="px-3 py-1.5 bg-[#121424] border border-white/10 hover:border-white/20 disabled:opacity-50 text-slate-300 rounded-lg transition-all cursor-pointer"
+                    >
+                      Previous
+                    </button>
+                    <span className="px-3 py-1.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 rounded-lg">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                      disabled={currentPage === totalPages}
+                      className="px-3 py-1.5 bg-[#121424] border border-white/10 hover:border-white/20 disabled:opacity-50 text-slate-300 rounded-lg transition-all cursor-pointer"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}
@@ -1482,6 +1759,189 @@ export default function App() {
               </form>
             )}
 
+          </div>
+        </div>
+      )}
+
+      {/* Architecture Modal */}
+      {isArchOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto animate-fade-in" onClick={() => setIsArchOpen(false)}>
+          <div className="w-full max-w-3xl bg-[#0e101a] border border-white/10 rounded-2xl p-6 flex flex-col gap-6 relative animate-slide-up" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex justify-between items-center border-b border-white/10 pb-4">
+              <div>
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Layers className="text-indigo-400 h-5 w-5" /> System Architecture & Flowchart
+                </h3>
+                <p className="text-xs text-slate-400">High-level predictive pipeline topology blueprint</p>
+              </div>
+              <button 
+                onClick={() => setIsArchOpen(false)}
+                className="p-1.5 hover:bg-white/5 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            {/* Flowchart Content */}
+            <div className="flex flex-col gap-5 text-sm leading-relaxed text-slate-300">
+              <div className="bg-[#121424] border border-white/5 p-5 rounded-xl flex flex-col gap-4">
+                <div className="grid grid-cols-5 items-center text-center text-xs font-bold gap-2">
+                  {/* Step 1 */}
+                  <div className="bg-indigo-950/40 border border-indigo-500/20 p-3 rounded-lg flex flex-col items-center gap-1.5">
+                    <Database className="h-4 w-4 text-indigo-400" />
+                    <span className="text-white">Ingestion</span>
+                    <span className="text-[9px] text-slate-500 font-normal">QA CSV/Manual Reports</span>
+                  </div>
+                  <div className="text-indigo-500 text-lg font-bold select-none">&rarr;</div>
+                  
+                  {/* Step 2 */}
+                  <div className="bg-violet-950/40 border border-violet-500/20 p-3 rounded-lg flex flex-col items-center gap-1.5">
+                    <Activity className="h-4 w-4 text-violet-400" />
+                    <span className="text-white">Feature Eng.</span>
+                    <span className="text-[9px] text-slate-500 font-normal">Lag L1-L3 & Roll Mean</span>
+                  </div>
+                  <div className="text-violet-500 text-lg font-bold select-none">&rarr;</div>
+
+                  {/* Step 3 */}
+                  <div className="bg-fuchsia-950/40 border border-fuchsia-500/20 p-3 rounded-lg flex flex-col items-center gap-1.5">
+                    <Sparkles className="h-4 w-4 text-fuchsia-400" />
+                    <span className="text-white">RF Regressor</span>
+                    <span className="text-[9px] text-slate-500 font-normal">Recursive 4-Week Inference</span>
+                  </div>
+                </div>
+
+                <div className="border-t border-white/5 pt-4 grid grid-cols-2 gap-4 text-xs">
+                  <div className="bg-slate-900/60 p-3.5 border border-white/5 rounded-lg flex flex-col gap-2">
+                    <span className="font-bold text-slate-200 uppercase tracking-wider text-[10px]">Explainability Pipeline</span>
+                    <p className="text-slate-400 leading-normal">
+                      SHAP (SHapley Additive exPlanations) values are generated using tree models, mapping how lag values, seasonal cycles, and recent defect metrics dynamically alter the baseline.
+                    </p>
+                  </div>
+                  <div className="bg-slate-900/60 p-3.5 border border-white/5 rounded-lg flex flex-col gap-2">
+                    <span className="font-bold text-slate-200 uppercase tracking-wider text-[10px]">File-Based Caching Blueprints</span>
+                    <p className="text-slate-400 leading-normal">
+                      To achieve sub-second dashboard rendering times, pre-computed predictions are saved to versioned JSON wrappers, which bypass raw database table scanning on load.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <span className="font-bold text-white uppercase tracking-wider text-[10px]">Infrastructure Blueprint</span>
+                <div className="border border-white/10 rounded-xl p-4 bg-slate-950 font-mono text-[10px] text-indigo-300 leading-relaxed overflow-x-auto">
+                  +---------------------+      FastAPI (Uvicorn)      +-------------------------+<br />
+                  | React SPA Dashboard | &lt;========================&gt; |  SQLite / PostgreSQL DB |<br />
+                  +---------------------+                             +-------------------------+<br />
+                  | API Request Caching |                                          |<br />
+                  | Local Storage Store | &lt;---- read/write JSON cache ------------+<br />
+                  +---------------------+
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-end border-t border-white/10 pt-4 mt-2">
+              <button 
+                onClick={() => setIsArchOpen(false)}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs px-4 py-2 font-bold transition-all shadow-md shadow-indigo-900/40 cursor-pointer"
+              >
+                Close Blueprint
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* How it Works Modal */}
+      {isHowItWorksOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto animate-fade-in" onClick={() => setIsHowItWorksOpen(false)}>
+          <div className="w-full max-w-2xl bg-[#0e101a] border border-white/10 rounded-2xl p-6 flex flex-col gap-6 relative animate-slide-up" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex justify-between items-center border-b border-white/10 pb-4">
+              <div>
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Sparkles className="text-indigo-400 h-5 w-5" /> How AI QA Forecasting Works
+                </h3>
+                <p className="text-xs text-slate-400">Step-by-step explanatory walkthrough of the prediction engine</p>
+              </div>
+              <button 
+                onClick={() => setIsHowItWorksOpen(false)}
+                className="p-1.5 hover:bg-white/5 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Pipeline Content */}
+            <div className="flex flex-col gap-4 text-xs text-slate-300 overflow-y-auto max-h-[400px] pr-2">
+              
+              {/* Step 1 */}
+              <div className="flex gap-3.5 border-b border-white/5 pb-3">
+                <div className="bg-indigo-500/10 text-indigo-400 h-7 w-7 rounded-full flex items-center justify-center font-bold border border-indigo-500/20 shrink-0 select-none">1</div>
+                <div>
+                  <h4 className="font-bold text-white text-sm">Data Ingestion & Normalization</h4>
+                  <p className="text-slate-400 mt-1 leading-relaxed">
+                    Weekly QA reports represent testing outcomes across three layers: Story Tests, Automated Regression (AR), and Manual Regression (MR). Values are normalized to compute failed rates, bug creation ratios, and total tests executed.
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 2 */}
+              <div className="flex gap-3.5 border-b border-white/5 pb-3">
+                <div className="bg-indigo-500/10 text-indigo-400 h-7 w-7 rounded-full flex items-center justify-center font-bold border border-indigo-500/20 shrink-0 select-none">2</div>
+                <div>
+                  <h4 className="font-bold text-white text-sm">Feature Engineering (Time Lags)</h4>
+                  <p className="text-slate-400 mt-1 leading-relaxed">
+                    Time-series models require historical context. The pipeline creates lags (1-week, 2-week, 3-week values) and rolling metrics (3-week mean, 3-week standard deviation) to capture momentum, seasonal cycles, and recent defect variance.
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 3 */}
+              <div className="flex gap-3.5 border-b border-white/5 pb-3">
+                <div className="bg-indigo-500/10 text-indigo-400 h-7 w-7 rounded-full flex items-center justify-center font-bold border border-indigo-500/20 shrink-0 select-none">3</div>
+                <div>
+                  <h4 className="font-bold text-white text-sm">RandomForest Regression Fitting</h4>
+                  <p className="text-slate-400 mt-1 leading-relaxed">
+                    A RandomForestRegressor is fitted to the engineered training dataset. RandomForest combines the predictions of multiple decision trees to form a robust, high-generalization model that handles seasonal defect fluctuations without overfitting.
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 4 */}
+              <div className="flex gap-3.5 border-b border-white/5 pb-3">
+                <div className="bg-indigo-500/10 text-indigo-400 h-7 w-7 rounded-full flex items-center justify-center font-bold border border-indigo-500/20 shrink-0 select-none">4</div>
+                <div>
+                  <h4 className="font-bold text-white text-sm">Recursive forecasting</h4>
+                  <p className="text-slate-400 mt-1 leading-relaxed">
+                    For forecasting multiple weeks into the future, the engine employs recursive predicting: it predicts Week 1, feeds that predicted output back as a lag feature to predict Week 2, and repeats this loop for the full 4-week horizon.
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 5 */}
+              <div className="flex gap-3.5">
+                <div className="bg-indigo-500/10 text-indigo-400 h-7 w-7 rounded-full flex items-center justify-center font-bold border border-indigo-500/20 shrink-0 select-none">5</div>
+                <div>
+                  <h4 className="font-bold text-white text-sm">SHAP Explainability Analysis</h4>
+                  <p className="text-slate-400 mt-1 leading-relaxed">
+                    A TreeExplainer computes SHAP values for the next week's predictions, tracing the exact additive contribution (positive or negative) that features like "Last Week Performance" or "3-Week Trend" had on the output.
+                  </p>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-end border-t border-white/10 pt-4 mt-2">
+              <button 
+                onClick={() => setIsHowItWorksOpen(false)}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs px-4 py-2 font-bold transition-all shadow-md shadow-indigo-900/40 cursor-pointer"
+              >
+                Understood
+              </button>
+            </div>
           </div>
         </div>
       )}

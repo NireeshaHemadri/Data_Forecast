@@ -39,7 +39,10 @@ def read_forecast_cache(project_name: str) -> Optional[Dict[str, Any]]:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 if data.get("version") == 1:
-                    return data.get("payload")
+                    payload = data.get("payload")
+                    if isinstance(payload, dict):
+                        payload["modelCached"] = True
+                    return payload
         except Exception as e:
             print(f"Error reading cache for {project_name}: {e}")
     return None
@@ -464,3 +467,40 @@ async def deprecated_forecast(project_name: str, db: AsyncSession = Depends(get_
     forecast_payload = await run_in_threadpool(make_predictions, reports)
     write_forecast_cache(project_name, forecast_payload)
     return forecast_payload
+
+@router.get("/health", status_code=status.HTTP_200_OK)
+async def health_check(db: AsyncSession = Depends(get_db)):
+    """Health check endpoint to dynamically verify API, DB, and Cache health status."""
+    api_ok = True
+    db_ok = False
+    cache_ok = False
+    
+    # 1. DB connection check
+    try:
+        from sqlalchemy import text
+        await db.execute(text("SELECT 1"))
+        db_ok = True
+    except Exception as e:
+        print(f"Health Check: DB connection failed: {e}")
+        db_ok = False
+        
+    # 2. Cache health check
+    try:
+        if os.path.exists(CACHE_DIR):
+            test_file = os.path.join(CACHE_DIR, ".health_check_temp")
+            with open(test_file, "w", encoding="utf-8") as f:
+                f.write("ok")
+            os.remove(test_file)
+            cache_ok = True
+        else:
+            os.makedirs(CACHE_DIR, exist_ok=True)
+            cache_ok = os.path.exists(CACHE_DIR)
+    except Exception as e:
+        print(f"Health Check: Cache check failed: {e}")
+        cache_ok = False
+        
+    return {
+        "api": api_ok,
+        "db": db_ok,
+        "cache": cache_ok
+    }

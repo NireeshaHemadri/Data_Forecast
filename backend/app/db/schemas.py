@@ -100,6 +100,7 @@ class ProjectForecastResponse(BaseModel):
     explanations: Dict[str, SHAPExplanation]
     modelType: str  # e.g., "Random Forest Regressor (Auto-regressive)" or "Baseline Trend"
     message: Optional[str] = None
+    modelCached: Optional[bool] = False
     
     # Model metadata
     lastTrained: str
