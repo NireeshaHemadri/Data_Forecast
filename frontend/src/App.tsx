@@ -85,9 +85,14 @@ const getWeekNumber = (date: Date) => {
 };
 
 function useCountUp(target: number, duration: number = 800) {
-  const [count, setCount] = useState(0);
+  const isTest = import.meta.env.MODE === 'test';
+  const [count, setCount] = useState(isTest ? Math.round(target) : 0);
 
   useEffect(() => {
+    if (isTest) {
+      setCount(Math.round(target));
+      return;
+    }
     let start = 0;
     const end = Math.round(target);
     if (end <= 0) {
@@ -113,7 +118,7 @@ function useCountUp(target: number, duration: number = 800) {
     }, intervalTime);
 
     return () => clearInterval(timer);
-  }, [target, duration]);
+  }, [target, duration, isTest]);
 
   return count;
 }

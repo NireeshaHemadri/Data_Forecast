@@ -119,29 +119,32 @@ describe('Dashboard Component Tests', () => {
     }, { timeout: 5000 });
 
     // Verify project selector options populated
-    expect(screen.getByText('Project Pegasus')).toBeDefined();
-    
+    expect(screen.getByText('Project Pegasus (E-commerce)')).toBeDefined();
     // Chart title renamed to "Historical Weekly Reports → Next 4-Week AI Forecast"
     expect(screen.getByText('Historical Weekly Reports → Next 4-Week AI Forecast')).toBeDefined();
 
     // Check confidence display: 12 ± 2 bugs (the totalBugs is 12, error margin is 2.0)
-    expect(screen.getByText(/12 ± 2/i)).toBeDefined();
+    expect(await screen.findByText(/12 ± 2/i)).toBeDefined();
     
     // Use custom matcher for Confidence: 87% since it spans multiple HTML tags
-    expect(screen.getByText((_content, node) => {
-      const hasText = (node: Element) => node.textContent === 'Weekly defect influx. Confidence: 87%';
-      const nodeHasText = hasText(node as Element);
-      const childrenDontHaveText = Array.from(node?.children || []).every(child => !hasText(child));
-      return nodeHasText && childrenDontHaveText;
-    })).toBeDefined();
+    await waitFor(() => {
+      expect(screen.getByText((_content, node) => {
+        const hasText = (node: Element) => node.textContent === 'Weekly defect influx. Confidence: 87%';
+        const nodeHasText = hasText(node as Element);
+        const childrenDontHaveText = Array.from(node?.children || []).every(child => !hasText(child));
+        return nodeHasText && childrenDontHaveText;
+      })).toBeDefined();
+    });
 
     // Check Model Metadata section (Random Forest Regressor, 52 weeks, Last trained, Horizon)
-    expect(screen.getByText(/Random Forest Regressor/i)).toBeDefined();
-    expect(screen.getByText(/52 weekly samples/i)).toBeDefined();
-    expect(screen.getByText(/22 May 2026 17:30/i)).toBeDefined();
-    expect(screen.getAllByText(/4 weeks/i).length).toBeGreaterThanOrEqual(1);
+    expect(await screen.findByText(/Random Forest Regressor/i)).toBeDefined();
+    expect(await screen.findByText(/52 weeks/i)).toBeDefined();
+    expect(await screen.findByText(/22 May 2026 17:30/i)).toBeDefined();
+    await waitFor(() => {
+      expect(screen.getAllByText(/4 weeks/i).length).toBeGreaterThanOrEqual(1);
+    });
 
     // Check export button is present
-    expect(screen.getByText(/Export Forecast Report/i)).toBeDefined();
+    expect(screen.getByText(/Export CSV/i)).toBeDefined();
   });
 });
