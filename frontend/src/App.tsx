@@ -666,7 +666,7 @@ export default function App() {
           </div>
           <div>
             <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-              Aegis AI <span className="text-[10px] uppercase font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-full">Predictive Engine</span>
+              Aegis AI
             </h1>
             <p className="text-xs text-slate-400 font-medium">AI-Powered Weekly QA Forecasting Platform</p>
           </div>
@@ -676,15 +676,6 @@ export default function App() {
               className="text-xs font-bold text-indigo-400 transition-colors cursor-pointer"
             >
               Dashboard
-            </button>
-            <button 
-              onClick={() => {
-                const el = document.querySelector('.lg\\:col-span-2');
-                el?.scrollIntoView({ behavior: 'smooth' });
-              }}
-              className="text-xs font-medium text-slate-400 hover:text-white transition-colors cursor-pointer"
-            >
-              Forecast
             </button>
             <button 
               onClick={() => {
