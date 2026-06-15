@@ -780,8 +780,8 @@ export default function App() {
             </div>
 
             {/* KPI Shimmer Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-              {[1, 2, 3, 4].map((i) => (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
+              {[1, 2, 3].map((i) => (
                 <div key={i} className="bg-white/[0.02] border border-white/5 rounded-2xl h-32 p-5 flex flex-col justify-between">
                   <div className="flex justify-between items-center">
                     <div className="h-3 w-24 bg-white/10 rounded-md"></div>
@@ -855,7 +855,7 @@ export default function App() {
           <>
             {/* Highlights Grid */}
             {highlights && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 animate-slide-up">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 animate-slide-up">
                 
                 {/* Highlight 1: Weekly Reports Processed */}
                 <div className="glass-panel glass-panel-hover rounded-2xl p-5 relative overflow-hidden">
@@ -921,21 +921,6 @@ export default function App() {
                     </div>
                   </div>
                   <p className="text-xs text-slate-400 mt-2">Model prediction probability intervals.</p>
-                </div>
-
-                {/* Highlight 4: Model Accuracy (R²) */}
-                <div className="glass-panel glass-panel-hover rounded-2xl p-5 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 p-8 opacity-5">
-                    <CheckCircle className="h-24 w-24 text-white" />
-                  </div>
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Model Accuracy (R²)</span>
-                    <span className="bg-violet-500/10 text-violet-400 text-[10px] px-2 py-0.5 rounded-full font-bold border border-violet-500/20">Goodness-of-Fit</span>
-                  </div>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold tracking-tight text-white">{r2Val}</span>
-                  </div>
-                  <p className="text-xs text-slate-400 mt-2">RandomForest regression model coefficient.</p>
                 </div>
 
               </div>
