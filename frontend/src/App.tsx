@@ -698,15 +698,6 @@ export default function App() {
             >
               Architecture
             </button>
-            <a 
-              href={`${API_BASE.replace(/\/api$/, '')}/docs`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs font-medium text-slate-400 hover:text-white transition-colors cursor-pointer"
-              title="View FastAPI Swagger Interactive API Documentation"
-            >
-              API Docs
-            </a>
           </nav>
         </div>
 
